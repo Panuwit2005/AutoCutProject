@@ -1,7 +1,7 @@
 {
-  "version": "1.1",
-  "zip": "update-1.1.zip",
-  "sha256": "5624765437579d743aa68278306d8bcd4cba9d2c41f47a5bc713cd0dfd47f575",
-  "sig": "QbUhdDRgs7xGzhNRNR0OvKpfWmiH9S74XyhRrGeCkeknmhv3v43FsUt6s067/04fkXs6GrOLQI0KRqkXzQD9CQ==",
-  "notes": "ตัวเลือกคุณภาพ/ขนาด + วันหมดอายุ + ระบบระงับคีย์ + แก้เลือกไฟล์เดิมซ้ำ"
+  "version": "1.2",
+  "zip": "update-1.2.zip",
+  "sha256": "328fba698b35cc817128ad53ab9e2741b5b633d55e244dade16c0772072cc0ac",
+  "sig": "p8OEbgr88jflqvQrzPw2kOBWfoB5k9i8L5l4yom8xhFsTL6GQW0gPWX8UA8iTmyvAtPthaLMQEqBXBIlQkFRDw==",
+  "notes": "เช็ครายการระงับอัตโนมัติทุก 5 นาที (ไม่ต้องปิด-เปิดเอง)"
 }

@@ -12,4 +12,4 @@ A small, focused package that turns raw review footage into a tight cut:
 The whole pipeline is orchestrated from ``app.py``.
 """
 
-__version__ = "1.1"
+__version__ = "1.2"

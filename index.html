@@ -983,6 +983,9 @@ checkStatus();
 setInterval(checkStatus, 5000);
 loadStorage();
 checkLicense();
+// Re-check the admin kill-switch every 5 min while open, so a revoked customer
+// gets locked out mid-session without having to close/reopen the app.
+setInterval(checkLicense, 5 * 60 * 1000);
 checkUpdate();
 </script>
 </body>
