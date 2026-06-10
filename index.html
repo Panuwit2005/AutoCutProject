@@ -245,6 +245,47 @@
       </div>
     </div>
 
+    <!-- Quality & size -->
+    <div class="section-label" data-i18n="q.label">🎚 คุณภาพ &amp; ขนาดวิดีโอ</div>
+    <div class="card">
+      <div class="opt-block" style="margin-top:0;">
+        <label class="opt-title" data-i18n="q.aspect">📐 สัดส่วนภาพ</label>
+        <div class="btn-row">
+          <button class="style-btn active" id="asp_auto" onclick="setAspect('auto')"><span data-i18n="q.aspAuto">ตามต้นฉบับ</span></button>
+          <button class="style-btn" id="asp_169" onclick="setAspect('16:9')"><span data-i18n="q.asp169">แนวนอน 16:9</span></button>
+          <button class="style-btn" id="asp_916" onclick="setAspect('9:16')"><span data-i18n="q.asp916">แนวตั้ง 9:16</span></button>
+          <button class="style-btn" id="asp_11" onclick="setAspect('1:1')"><span data-i18n="q.asp11">จัตุรัส 1:1</span></button>
+        </div>
+      </div>
+      <div class="opt-block">
+        <label class="opt-title" data-i18n="q.res">🔎 ความละเอียด</label>
+        <div class="btn-row">
+          <button class="style-btn active" id="res_auto" onclick="setResolution('auto')"><span data-i18n="q.resAuto">ตามต้นฉบับ</span></button>
+          <button class="style-btn" id="res_720" onclick="setResolution('720')">720p</button>
+          <button class="style-btn" id="res_1080" onclick="setResolution('1080')">1080p</button>
+          <button class="style-btn" id="res_4k" onclick="setResolution('4k')">4K</button>
+        </div>
+      </div>
+      <div class="opt-block">
+        <label class="opt-title" data-i18n="q.fps">🎞 เฟรมเรต (FPS)</label>
+        <div class="btn-row">
+          <button class="style-btn" id="fps_24" onclick="setFps('24')">24<small data-i18n="q.fps24">ฟิล์ม</small></button>
+          <button class="style-btn active" id="fps_30" onclick="setFps('30')">30<small data-i18n="q.fps30">มาตรฐาน</small></button>
+          <button class="style-btn" id="fps_60" onclick="setFps('60')">60<small data-i18n="q.fps60">ลื่น *</small></button>
+        </div>
+        <div class="field-hint" data-i18n="q.fpsNote">* 60fps ลื่นจริงเฉพาะวิดีโอต้นฉบับที่ถ่ายมา 60fps</div>
+      </div>
+      <div class="opt-block">
+        <label class="opt-title" data-i18n="q.quality">🗜 คุณภาพไฟล์</label>
+        <div class="btn-row">
+          <button class="style-btn active" id="q_high" onclick="setQuality('high')"><span data-i18n="q.qHigh">สูง</span><small data-i18n="q.qHighSub">คมชัด ไฟล์ใหญ่</small></button>
+          <button class="style-btn" id="q_medium" onclick="setQuality('medium')"><span data-i18n="q.qMed">กลาง</span><small data-i18n="q.qMedSub">สมดุล</small></button>
+          <button class="style-btn" id="q_saver" onclick="setQuality('saver')"><span data-i18n="q.qSaver">ประหยัด</span><small data-i18n="q.qSaverSub">ไฟล์เล็ก</small></button>
+        </div>
+      </div>
+      <div class="tip-box" data-i18n-html="q.hint"><span>💡</span> "ตามต้นฉบับ" = คงขนาด/สัดส่วนเดิม (ปลอดภัยสุด) · เปลี่ยนสัดส่วนจะเติมขอบดำ ไม่ตัดภาพทิ้ง</div>
+    </div>
+
     <!-- Audio extract -->
     <div class="section-label" data-i18n="audio.sectionLabel">แยกไฟล์เสียง</div>
     <div class="card">
@@ -340,6 +381,7 @@
     <div class="info-body">
       <div class="info-k" data-i18n="mc.label">รหัสเครื่องของคุณ (Machine ID) — ใช้ตอนขอคีย์เปิดใช้งาน</div>
       <div class="info-v" id="machineIdShow" style="font-size:19px;font-weight:700;letter-spacing:1px;color:var(--accent);">—</div>
+      <div class="info-accent" id="licenseInfo" style="margin-top:4px;"></div>
     </div>
     <button type="button" class="upload-btn" style="margin:0;" data-i18n="mc.copy" onclick="copyMachine(this)">คัดลอกรหัสเครื่อง</button>
   </div>
@@ -394,6 +436,14 @@ const I18N = {
     'lj.hint':'เสียงคาบเกี่ยวรอยต่อ ทำให้เปลี่ยนฉากลื่นไหล <strong>(ใช้กับโหมดรวมไฟล์เดียว)</strong>',
     'lj.l':'⬅️ L-cut','lj.lSub':'เสียงเดิมลากต่อไป','lj.j':'➡️ J-cut','lj.jSub':'เสียงใหม่มาก่อนภาพ',
     'lj.overlap':'⏱ ระยะคาบเกี่ยวของเสียง',
+    'q.label':'🎚 คุณภาพ & ขนาดวิดีโอ','q.aspect':'📐 สัดส่วนภาพ',
+    'q.aspAuto':'ตามต้นฉบับ','q.asp169':'แนวนอน 16:9','q.asp916':'แนวตั้ง 9:16','q.asp11':'จัตุรัส 1:1',
+    'q.res':'🔎 ความละเอียด','q.resAuto':'ตามต้นฉบับ',
+    'q.fps':'🎞 เฟรมเรต (FPS)','q.fps24':'ฟิล์ม','q.fps30':'มาตรฐาน','q.fps60':'ลื่น *',
+    'q.fpsNote':'* 60fps ลื่นจริงเฉพาะวิดีโอต้นฉบับที่ถ่ายมา 60fps',
+    'q.quality':'🗜 คุณภาพไฟล์','q.qHigh':'สูง','q.qHighSub':'คมชัด ไฟล์ใหญ่','q.qMed':'กลาง','q.qMedSub':'สมดุล','q.qSaver':'ประหยัด','q.qSaverSub':'ไฟล์เล็ก',
+    'q.hint':'<span>💡</span> "ตามต้นฉบับ" = คงขนาด/สัดส่วนเดิม (ปลอดภัยสุด) · เปลี่ยนสัดส่วนจะเติมขอบดำ ไม่ตัดภาพทิ้ง',
+    'lic.statusActive':'✅ เปิดใช้งานแล้ว','lic.expiryNever':'ใช้งานได้ถาวร (ไม่มีวันหมดอายุ)','lic.expiryUntil':'ใช้งานได้ถึง {d}',
     'audio.sectionLabel':'แยกไฟล์เสียง','audio.on':'✅ เปิด — สร้างโฟลเดอร์ mp3 พร้อมไฟล์เสียง','audio.off':'ปิด — ไม่แยกไฟล์เสียง',
     'btn.process':'✂️ ตัดคลิปอัตโนมัติ','btn.shuffle':'🎲 สุ่มรูปแบบใหม่ (ฟุตเดิม ได้คลิปแบบใหม่)',
     'prog.title':'กำลังประมวลผล — โปรดอย่าปิดหรือรีเฟรชหน้านี้','prog.sub':'ระบบทำงานอยู่เบื้องหลัง',
@@ -450,6 +500,14 @@ const I18N = {
     'lj.hint':'Audio overlaps each cut for smooth transitions <strong>(merged mode only)</strong>',
     'lj.l':'⬅️ L-cut','lj.lSub':'Old audio carries over','lj.j':'➡️ J-cut','lj.jSub':'New audio leads the picture',
     'lj.overlap':'⏱ Audio overlap',
+    'q.label':'🎚 Quality & video size','q.aspect':'📐 Aspect ratio',
+    'q.aspAuto':'Match source','q.asp169':'Landscape 16:9','q.asp916':'Portrait 9:16','q.asp11':'Square 1:1',
+    'q.res':'🔎 Resolution','q.resAuto':'Match source',
+    'q.fps':'🎞 Frame rate (FPS)','q.fps24':'Film','q.fps30':'Standard','q.fps60':'Smooth *',
+    'q.fpsNote':'* 60fps is only truly smooth if the source was filmed at 60fps',
+    'q.quality':'🗜 File quality','q.qHigh':'High','q.qHighSub':'Sharp, big file','q.qMed':'Medium','q.qMedSub':'Balanced','q.qSaver':'Saver','q.qSaverSub':'Small file',
+    'q.hint':'<span>💡</span> "Match source" keeps the original size/ratio (safest) · changing the ratio adds black bars, never crops',
+    'lic.statusActive':'✅ Activated','lic.expiryNever':'Lifetime (no expiry)','lic.expiryUntil':'Valid until {d}',
     'audio.sectionLabel':'Audio export','audio.on':'✅ On — create an mp3 folder with the audio','audio.off':'Off — no separate audio',
     'btn.process':'✂️ Auto-cut','btn.shuffle':'🎲 Shuffle a new version (same footage)',
     'prog.title':"Processing — please don't close or refresh this page",'prog.sub':'Working in the background',
@@ -494,6 +552,28 @@ function refreshDynamic() {
   if (lastStorageInfo) renderStorage(lastStorageInfo);
   if (pendingUpdate && document.getElementById('updateBanner').style.display !== 'none')
     document.getElementById('updateText').textContent = t('update.available').replace('{v}', pendingUpdate.latest || '');
+  if (lastLicense) renderLicense(lastLicense);
+}
+
+// Quality / size selectors
+function _pick(ids, activeId) {
+  ids.forEach(id => { const el = document.getElementById(id); if (el) el.className = 'style-btn' + (id === activeId ? ' active' : ''); });
+}
+function setAspect(a)     { selectedAspect = a;     _pick(['asp_auto','asp_169','asp_916','asp_11'], {'auto':'asp_auto','16:9':'asp_169','9:16':'asp_916','1:1':'asp_11'}[a]); }
+function setResolution(r) { selectedResolution = r; _pick(['res_auto','res_720','res_1080','res_4k'], {'auto':'res_auto','720':'res_720','1080':'res_1080','4k':'res_4k'}[r]); }
+function setFps(f)        { selectedFps = f;        _pick(['fps_24','fps_30','fps_60'], 'fps_'+f); }
+function setQuality(q)    { selectedQuality = q;    _pick(['q_high','q_medium','q_saver'], 'q_'+q); }
+
+// License status / expiry line in the Machine ID card
+function renderLicense(d) {
+  lastLicense = d;
+  const el = document.getElementById('licenseInfo');
+  if (!el) return;
+  if (!d || !d.activated) { el.textContent = ''; return; }
+  let s = t('lic.statusActive');
+  s += ' · ' + (d.expiry ? t('lic.expiryUntil').replace('{d}', d.expiry) : t('lic.expiryNever'));
+  if (d.name) s += ' · ' + d.name;
+  el.textContent = s;
 }
 
 // =============================================
@@ -524,6 +604,8 @@ let subtitleOn = false, ljCutOn = false, deadAirOn = true, audioExtractOn = fals
 let resultDir = null;
 let lastOnline = false, lastStorageInfo = null;
 let pendingUpdate = null;
+let lastLicense = null;
+let selectedAspect = 'auto', selectedResolution = 'auto', selectedFps = '30', selectedQuality = 'high';
 
 let pollTimer = null, elapsedTimer = null, startTime = null, currentJob = null;
 
@@ -585,6 +667,7 @@ async function checkLicense() {
     const d = await (await fetch(API + '/license/status', { cache:'no-store' })).json();
     document.getElementById('licMachineId').textContent = d.machine_id || '—';
     document.getElementById('machineIdShow').textContent = d.machine_id || '—';
+    renderLicense(d);
     if (d.activated) hideLicenseGate(); else showLicenseGate();
   } catch {}
 }
@@ -747,6 +830,10 @@ async function startProcess(mode) {
   formData.append('variation',      String(variation));
   formData.append('audio_extract',  audioExtractOn ? 'true' : 'false');
   formData.append('project_name',   document.getElementById('projectNameInput').value.trim());
+  formData.append('aspect',          selectedAspect);
+  formData.append('resolution',      selectedResolution);
+  formData.append('fps',             selectedFps);
+  formData.append('quality',         selectedQuality);
 
   try {
     const res = await fetch(API + '/process', { method:'POST', body: formData });
@@ -827,6 +914,7 @@ function resetAll() {
   currentJob = null; resultDir = null;
   selectedVideos = []; selectedMusic = null;
   setFormat('mp4'); setMode('merged');
+  setAspect('auto'); setResolution('auto'); setFps('30'); setQuality('high');
   document.getElementById('fileList').innerHTML = '';
   document.getElementById('musicFileName').textContent = '';
   document.getElementById('projectNameInput').value = '';

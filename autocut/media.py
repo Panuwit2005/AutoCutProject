@@ -126,15 +126,51 @@ def decide_canvas(infos: list[MediaInfo]) -> tuple[int, int]:
     return 1080, 1080          # square-ish
 
 
+_RES_SHORT = {"720": 720, "1080": 1080, "4k": 2160}
+
+
+def resolve_canvas(infos: list[MediaInfo], aspect: str = "auto",
+                   resolution: str = "auto") -> tuple[int, int]:
+    """Final output canvas from the customer's aspect + resolution choices.
+
+    ``aspect``     : "auto" | "16:9" | "9:16" | "1:1"
+    ``resolution`` : "auto" | "720" | "1080" | "4k"  (the standard short side)
+
+    "auto/auto" keeps the current behaviour (match the source orientation at
+    1080-ish).  Anything else builds an exact even-dimension canvas; normalize()
+    then scales-to-fit and pads, so nothing is ever cropped.
+    """
+    base = decide_canvas(infos)
+    if aspect == "auto" and resolution == "auto":
+        return base
+
+    if aspect in ("16:9", "9:16", "1:1"):
+        orient = aspect
+    else:  # derive orientation from the source
+        bw, bh = base
+        orient = "16:9" if bw > bh else ("9:16" if bw < bh else "1:1")
+
+    short = _RES_SHORT.get(str(resolution).lower(), 1080)
+    long_ = round(short * 16 / 9)
+    if orient == "16:9":
+        w, h = long_, short
+    elif orient == "9:16":
+        w, h = short, long_
+    else:
+        w, h = short, short
+    return (w - w % 2, h - h % 2)  # H.264 needs even dimensions
+
+
 # ---------------------------------------------------------------------------
 # Normalization
 # ---------------------------------------------------------------------------
 def normalize(src: str, dst: str, canvas: tuple[int, int], *, fps: int = 30,
-              log=None) -> str:
+              crf: int = 20, log=None) -> str:
     """Transcode *src* into the canonical intermediate at *dst* (H.264/AAC).
 
     Scales to fit the canvas while preserving aspect ratio, then pads with black
-    so every normalized clip is byte-for-byte compatible for concat.
+    so every normalized clip is byte-for-byte compatible for concat.  ``fps`` and
+    ``crf`` (quality) come from the customer's settings.
     """
     tools.require_core()
     w, h = canvas
@@ -160,7 +196,7 @@ def normalize(src: str, dst: str, canvas: tuple[int, int], *, fps: int = 30,
     args += [
         *audio_map,
         "-vf", vf,
-        "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", str(crf),
         "-pix_fmt", "yuv420p",
         "-c:a", "aac", "-ar", "48000", "-ac", "2", "-b:a", "192k",
         *shortest,

@@ -37,9 +37,14 @@ def fmt_settings(fmt: str) -> dict:
     return FORMATS.get(fmt, FORMATS["mp4"])
 
 
-def _venc(fmt: str) -> list[str]:
+def _venc(fmt: str, crf: int | None = None) -> list[str]:
     s = fmt_settings(fmt)
-    return ["-c:v", *s["v"]]
+    out = ["-c:v", *s["v"]]
+    # Quality is configurable only for the H.264 formats; AVI/WEBM keep the
+    # rate-control baked into FORMATS.  Default 20 preserves prior behaviour.
+    if fmt in ("mp4", "mov"):
+        out += ["-crf", str(crf if crf is not None else 20)]
+    return out
 
 
 def _aenc(fmt: str) -> list[str]:
@@ -50,7 +55,8 @@ def _aenc(fmt: str) -> list[str]:
 # ---------------------------------------------------------------------------
 # Cutting
 # ---------------------------------------------------------------------------
-def cut_clip(src: str, clip: Clip, dst: str, *, fmt: str = "mp4", log=None) -> str | None:
+def cut_clip(src: str, clip: Clip, dst: str, *, fmt: str = "mp4",
+             crf: int | None = None, log=None) -> str | None:
     """Extract [clip.start, clip.end] from *src* into *dst*. Returns dst or None."""
     dur = clip.duration
     if dur <= 0:
@@ -58,7 +64,7 @@ def cut_clip(src: str, clip: Clip, dst: str, *, fmt: str = "mp4", log=None) -> s
     args = [
         "-y", "-ss", f"{clip.start:.3f}", "-i", src, "-t", f"{dur:.3f}",
         "-map", "0:v:0", "-map", "0:a:0?",
-        *_venc(fmt), "-crf", "20" if fmt in ("mp4", "mov") else "23",
+        *_venc(fmt, crf),
         "-preset", "veryfast" if fmt in ("mp4", "mov") else "good",
         "-pix_fmt", "yuv420p",
         *_aenc(fmt), "-ar", "48000", "-ac", "2",
@@ -78,11 +84,11 @@ def cut_clip(src: str, clip: Clip, dst: str, *, fmt: str = "mp4", log=None) -> s
 
 
 def cut_clips(src: str, clips: list[Clip], out_dir: str, *, prefix: str = "clip",
-              fmt: str = "mp4", log=None) -> list[str]:
+              fmt: str = "mp4", crf: int | None = None, log=None) -> list[str]:
     paths = []
     for i, clip in enumerate(clips, 1):
         dst = os.path.join(out_dir, f"{prefix}_{i:02d}.{fmt}")
-        result = cut_clip(src, clip, dst, fmt=fmt, log=log)
+        result = cut_clip(src, clip, dst, fmt=fmt, crf=crf, log=log)
         if result:
             paths.append(result)
             if log:
@@ -95,7 +101,7 @@ def cut_clips(src: str, clips: list[Clip], out_dir: str, *, prefix: str = "clip"
 # ---------------------------------------------------------------------------
 def concat(clip_paths: list[str], dst: str, *, fmt: str = "mp4",
            max_duration: float | None = None, audio_overlap: float = 0.0,
-           lj_mode: str = "l", log=None) -> str:
+           lj_mode: str = "l", crf: int | None = None, log=None) -> str:
     """Concatenate clips into one file (re-encode).
 
     With ``audio_overlap <= 0`` this is a plain hard-cut concat.  With
@@ -115,21 +121,24 @@ def concat(clip_paths: list[str], dst: str, *, fmt: str = "mp4",
     if not clip_paths:
         raise tools.ToolError("concat: no clips")
     if len(clip_paths) == 1:
-        return _reencode(clip_paths[0], dst, fmt=fmt, max_duration=max_duration, log=log)
+        return _reencode(clip_paths[0], dst, fmt=fmt, max_duration=max_duration,
+                         crf=crf, log=log)
 
     if audio_overlap and audio_overlap > 0:
         try:
             return _concat_lj(clip_paths, dst, fmt=fmt, max_duration=max_duration,
-                              overlap=audio_overlap, mode=lj_mode, log=log)
+                              overlap=audio_overlap, mode=lj_mode, crf=crf, log=log)
         except tools.ToolError as e:
             if log:
                 log(f"⚠️ L/J cut ไม่สำเร็จ — ใช้การต่อแบบปกติแทน: {e}")
 
-    return _concat_plain(clip_paths, dst, fmt=fmt, max_duration=max_duration, log=log)
+    return _concat_plain(clip_paths, dst, fmt=fmt, max_duration=max_duration,
+                         crf=crf, log=log)
 
 
 def _concat_plain(clip_paths: list[str], dst: str, *, fmt: str = "mp4",
-                  max_duration: float | None = None, log=None) -> str:
+                  max_duration: float | None = None, crf: int | None = None,
+                  log=None) -> str:
     """Hard-cut concatenation via the ffmpeg ``concat`` filter."""
     inputs: list[str] = []
     for p in clip_paths:
@@ -140,7 +149,7 @@ def _concat_plain(clip_paths: list[str], dst: str, *, fmt: str = "mp4",
 
     args = ["-y", *inputs, "-filter_complex", filtergraph,
             "-map", "[v]", "-map", "[a]",
-            *_venc(fmt), *_aenc(fmt), "-ar", "48000", "-ac", "2"]
+            *_venc(fmt, crf), *_aenc(fmt), "-ar", "48000", "-ac", "2"]
     if max_duration:
         args += ["-t", f"{max_duration:.3f}"]
     args += [*fmt_settings(fmt)["extra"], dst]
@@ -161,7 +170,8 @@ def _duration(path: str) -> float:
 
 
 def _concat_lj(clip_paths: list[str], dst: str, *, fmt: str, overlap: float,
-               mode: str = "l", max_duration: float | None = None, log=None) -> str:
+               mode: str = "l", max_duration: float | None = None,
+               crf: int | None = None, log=None) -> str:
     """Concatenate with an L-cut / J-cut audio bleed across every seam.
 
     The video is hard-cut, with each clip trimmed by ``overlap`` on the side the
@@ -213,7 +223,7 @@ def _concat_lj(clip_paths: list[str], dst: str, *, fmt: str, overlap: float,
     filtergraph = ";".join(chains)
     args = ["-y", *inputs, "-filter_complex", filtergraph,
             "-map", "[v]", "-map", "[a]",
-            *_venc(fmt), *_aenc(fmt), "-ar", "48000", "-ac", "2"]
+            *_venc(fmt, crf), *_aenc(fmt), "-ar", "48000", "-ac", "2"]
     if max_duration:
         args += ["-t", f"{max_duration:.3f}"]
     args += [*fmt_settings(fmt)["extra"], dst]
@@ -224,9 +234,9 @@ def _concat_lj(clip_paths: list[str], dst: str, *, fmt: str, overlap: float,
 
 
 def _reencode(src: str, dst: str, *, fmt: str, max_duration: float | None = None,
-              log=None) -> str:
+              crf: int | None = None, log=None) -> str:
     args = ["-y", "-i", src, "-map", "0:v:0", "-map", "0:a:0?",
-            *_venc(fmt), *_aenc(fmt), "-ar", "48000", "-ac", "2"]
+            *_venc(fmt, crf), *_aenc(fmt), "-ar", "48000", "-ac", "2"]
     if max_duration:
         args += ["-t", f"{max_duration:.3f}"]
     args += [*fmt_settings(fmt)["extra"], dst]
@@ -258,7 +268,7 @@ def extract_audio(src: str, dst_mp3: str, *, log=None) -> str | None:
 # ---------------------------------------------------------------------------
 def add_music(video: str, music: str, dst: str, *, fmt: str = "mp4",
               music_volume: float = 0.2, max_duration: float | None = None,
-              log=None) -> str:
+              crf: int | None = None, log=None) -> str:
     """Duck background music under the original audio and mux it in."""
     filtergraph = (
         f"[0:a]volume=1.0[a0];"
@@ -268,7 +278,7 @@ def add_music(video: str, music: str, dst: str, *, fmt: str = "mp4",
     args = ["-y", "-i", video, "-i", music,
             "-filter_complex", filtergraph,
             "-map", "0:v:0", "-map", "[aout]",
-            *_venc(fmt), *_aenc(fmt), "-ar", "48000", "-ac", "2"]
+            *_venc(fmt, crf), *_aenc(fmt), "-ar", "48000", "-ac", "2"]
     if max_duration:
         args += ["-t", f"{max_duration:.3f}"]
     args += [*fmt_settings(fmt)["extra"], dst]

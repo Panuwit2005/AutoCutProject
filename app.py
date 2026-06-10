@@ -315,6 +315,11 @@ def process_video():
         "audio_extract": request.form.get("audio_extract", "false").lower() == "true",
         # Optional customer-chosen name for the project/clips; blank → "Project".
         "project_name": request.form.get("project_name", ""),
+        # Output quality / size controls (all default to "keep source").
+        "aspect": _valid_aspect(request.form.get("aspect", "auto")),
+        "resolution": _valid_resolution(request.form.get("resolution", "auto")),
+        "fps": _valid_fps(request.form.get("fps", "30")),
+        "crf": _CRF.get(request.form.get("quality", "high"), 20),
     }
 
     job = Job(job_id, work_dir)
@@ -411,8 +416,9 @@ def _pipeline(job: Job, video_paths: list[str], opts: dict) -> dict:
     # 1. Probe + decide a single canvas for everything ----------------------
     job.set(stage="อ่านไฟล์วิดีโอ", pct=5, message="🔍 ตรวจสอบไฟล์และ codec…")
     infos = [media.probe(p) for p in video_paths]
-    canvas = media.decide_canvas(infos)
-    log(f"🖼 Canvas: {canvas[0]}x{canvas[1]} | {len(infos)} clip(s)")
+    canvas = media.resolve_canvas(infos, opts["aspect"], opts["resolution"])
+    fps, crf = opts["fps"], opts["crf"]
+    log(f"🖼 Canvas: {canvas[0]}x{canvas[1]} @ {fps}fps crf{crf} | {len(infos)} clip(s)")
 
     all_clips: list[str] = []          # final per-source clip files
     for idx, (src, info) in enumerate(zip(video_paths, infos)):
@@ -424,7 +430,7 @@ def _pipeline(job: Job, video_paths: list[str], opts: dict) -> dict:
         job.set(stage="แปลงไฟล์ให้มาตรฐาน", pct=base_pct,
                 message=f"⚙️ แปลง codec/{info.vcodec or '?'} → มาตรฐาน ({idx+1}/{len(video_paths)})")
         norm = os.path.join(work_dir, f"norm_{idx:02d}.mp4")
-        media.normalize(src, norm, canvas, fps=30, log=log)
+        media.normalize(src, norm, canvas, fps=fps, crf=crf, log=log)
         ninfo = media.probe(norm)
         duration = ninfo.duration or info.duration or 60.0
 
@@ -461,7 +467,7 @@ def _pipeline(job: Job, video_paths: list[str], opts: dict) -> dict:
         # 5. Cut -------------------------------------------------------------
         job.set(stage="ตัดคลิป", pct=base_pct + 20, message="✂️ กำลังตัดคลิป…")
         cut_paths = editor.cut_clips(norm, clips, work_dir,
-                                     prefix=f"v{idx:02d}", fmt=fmt, log=log)
+                                     prefix=f"v{idx:02d}", fmt=fmt, crf=crf, log=log)
         if not cut_paths:
             raise tools.ToolError(f"ตัดคลิปไม่สำเร็จสำหรับ {tag}")
 
@@ -511,13 +517,15 @@ def _build_merged(job, clips, opts, fmt, max_duration) -> str:
     if overlap > 0 and len(clips) >= 2:
         job.set(message=f"🎞 เปลี่ยนฉากแบบมืออาชีพ ({opts['lj_cut_mode'].upper()}-cut {overlap:.2f}s)")
     editor.concat(clips, merged, fmt=fmt, max_duration=max_duration,
-                  audio_overlap=overlap, lj_mode=opts["lj_cut_mode"], log=job.log)
+                  audio_overlap=overlap, lj_mode=opts["lj_cut_mode"],
+                  crf=opts["crf"], log=job.log)
 
     if opts["music_path"]:
         job.set(stage="ใส่เพลงประกอบ", pct=95, message="🎵 ผสมเพลงประกอบ…")
         with_music = os.path.join(job.work_dir, f"merged_music.{fmt}")
         merged = editor.add_music(merged, opts["music_path"], with_music,
-                                  fmt=fmt, max_duration=max_duration, log=job.log)
+                                  fmt=fmt, max_duration=max_duration,
+                                  crf=opts["crf"], log=job.log)
     return merged
 
 
@@ -603,6 +611,22 @@ def _valid_lj_mode(m: str) -> str:
 
 def _valid_aggr(a: str) -> str:
     return a if a in ("gentle", "medium", "strong") else "medium"
+
+
+# Output quality / size validators.
+_CRF = {"high": 20, "medium": 24, "saver": 28}
+
+
+def _valid_aspect(a: str) -> str:
+    return a if a in ("auto", "16:9", "9:16", "1:1") else "auto"
+
+
+def _valid_resolution(r: str) -> str:
+    return r if str(r).lower() in ("auto", "720", "1080", "4k") else "auto"
+
+
+def _valid_fps(f: str) -> int:
+    return int(f) if str(f) in ("24", "30", "60") else 30
 
 
 # ===========================================================================

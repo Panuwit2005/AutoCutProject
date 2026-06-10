@@ -72,11 +72,22 @@ class KeygenTab:
 
         self.mid = self._field(box, "รหัสเครื่องของลูกค้า (Machine ID) *")
         self.name = self._field(box, "ชื่อร้าน / ลูกค้า (ไม่บังคับ)")
-        self.exp = self._field(box, "วันหมดอายุ YYYY-MM-DD (เว้นว่าง = ไม่มีวันหมดอายุ)")
+        self.exp = self._field(box, "วันหมดอายุ (YYYY-MM-DD) — เว้นว่าง = ถาวร")
+
+        # Quick rental presets — set the expiry to today + N days in one click.
+        rent = tk.Frame(box, bg=BG)
+        rent.pack(fill="x", pady=(10, 4))
+        tk.Label(rent, text="📅 เช่าด่วน:", bg=BG, fg="#bbb",
+                 font=("Segoe UI", 10)).pack(side="left", padx=(0, 10))
+        for label, days in (("1 วัน", 1), ("7 วัน", 7), ("30 วัน", 30), ("♾ ถาวร", None)):
+            tk.Button(rent, text=label, command=lambda d=days: self._set_rent(d),
+                      bg="#10242f", fg=ACC, relief="flat", cursor="hand2",
+                      activebackground="#16323f", activeforeground=ACC, bd=0,
+                      font=("Segoe UI", 10, "bold"), padx=16, pady=7).pack(side="left", padx=4)
 
         tk.Button(box, text="สร้างคีย์", command=self.generate, bg=ACC, fg="#053",
                   font=("Segoe UI", 13, "bold"), relief="flat", cursor="hand2",
-                  activebackground="#00c98d", pady=10).pack(fill="x", pady=(14, 10))
+                  activebackground="#00c98d", pady=12).pack(fill="x", pady=(16, 10))
 
         tk.Label(box, text="คีย์ที่ได้ (ส่งให้ลูกค้า):", bg=BG, fg=FG,
                  font=("Segoe UI", 10, "bold")).pack(anchor="w")
@@ -106,6 +117,17 @@ class KeygenTab:
 
     def _err(self, msg: str): self.status.config(fg="#ff6b6b", text="⚠️ " + msg)
     def _ok(self, msg: str): self.status.config(fg="#00E5A0", text="✓ " + msg)
+
+    def _set_rent(self, days):
+        """Fill the expiry field with today + *days* (or clear it for lifetime)."""
+        from datetime import date, timedelta
+        self.exp.delete(0, "end")
+        if days is None:
+            self._ok("ตั้งเป็นถาวร (ไม่มีวันหมดอายุ)")
+            return
+        d = (date.today() + timedelta(days=days)).isoformat()
+        self.exp.insert(0, d)
+        self._ok(f"เช่า {days} วัน → หมดอายุวันที่ {d}")
 
     def generate(self):
         if self.priv is None:
@@ -240,7 +262,7 @@ class PublishTab:
 def main() -> None:
     root = tk.Tk()
     root.title("AutoCut — เครื่องมือ Admin")
-    root.geometry("600x640")
+    root.geometry("620x720")
     root.configure(bg=BG)
     try:
         ttk.Style().theme_use("clam")
