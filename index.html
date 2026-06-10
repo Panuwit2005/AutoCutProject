@@ -143,12 +143,12 @@
         <div class="setting-item">
           <label data-i18n="out.label">📦 รูปแบบผลลัพธ์</label>
           <div class="mode-toggle">
-            <button class="mode-btn active" id="modeZip" onclick="setMode('zip')">
+            <button class="mode-btn" id="modeZip" onclick="setMode('zip')">
               <span class="mode-icon">📁</span>
               <span data-i18n="out.zip.title">แยกเป็นหลายคลิป</span>
               <small data-i18n="out.zip.sub">ได้คลิปหลายไฟล์ในโฟลเดอร์ Video</small>
             </button>
-            <button class="mode-btn" id="modeMerged" onclick="setMode('merged')">
+            <button class="mode-btn active" id="modeMerged" onclick="setMode('merged')">
               <span class="mode-icon">🎬</span>
               <span data-i18n="out.merged.title">รวมเป็นไฟล์เดียว</span>
               <small data-i18n="out.merged.sub">พร้อมใช้งานทันที</small>
@@ -515,7 +515,7 @@ function toggleTheme() {
 // =============================================
 let selectedVideos = [];
 let selectedMusic  = null;
-let outputMode     = 'zip';
+let outputMode     = 'merged';
 let selectedFormat = 'mp4';
 let subtitleStyle  = 'highlight';
 let ljCutMode      = 'l';
@@ -826,7 +826,7 @@ function resetAll() {
   clearInterval(pollTimer); clearInterval(elapsedTimer);
   currentJob = null; resultDir = null;
   selectedVideos = []; selectedMusic = null;
-  setFormat('mp4'); setMode('zip');
+  setFormat('mp4'); setMode('merged');
   document.getElementById('fileList').innerHTML = '';
   document.getElementById('musicFileName').textContent = '';
   document.getElementById('projectNameInput').value = '';
@@ -876,7 +876,7 @@ async function applyUpdate() {
 // =============================================
 setThemeIcon();
 setFormat('mp4');
-setMode('zip');
+setMode('merged');
 applyLang();
 checkStatus();
 setInterval(checkStatus, 5000);

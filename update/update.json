@@ -1,7 +1,7 @@
 {
-  "version": "4.0",
-  "zip": "update-4.0.zip",
-  "sha256": "6cdd779fae510dc3b2ac6c798618b69acf351c5c2f14a7aed697ef7628afa091",
-  "sig": "FWt/KNGEr9l/vA6zuIzmx0qJPRmXxz+6CnI/DxYoG9db8fIHLdgb6bbS3LXd4zHsmxEShUSBbY/low1hw4pnAw==",
-  "notes": "เวอร์ชันแรก"
+  "version": "4.1",
+  "zip": "update-4.1.zip",
+  "sha256": "fbed223ae71f855772994916e25338a38529161a48f786bc596af5f8da066975",
+  "sig": "KNfzKs8efJpX7aCh+qZbV7i6WLFAvHQ8/fy1VpFDiBuILSgEoK1HRa6JOt+Po35t6LtM9u6+c/u1ONnWGiE5CA==",
+  "notes": "เปลี่ยน default เป็นรวมไฟล์เดียว"
 }
