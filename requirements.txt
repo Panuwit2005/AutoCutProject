@@ -1,0 +1,10 @@
+# Python dependencies (install into .venv with Python 3.11)
+#   .venv\Scripts\python.exe -m pip install -r requirements.txt
+flask>=3.0
+flask-cors>=4.0
+faster-whisper>=1.1
+
+# External tools (NOT pip — install separately):
+#   ffmpeg + ffprobe   →  winget install Gyan.FFmpeg
+#   node + npx         →  https://nodejs.org  (for HyperFrames subtitles)
+#   Chrome (headless)  →  npx hyperframes browser ensure

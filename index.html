@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="th" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AutoCut — ตัดคลิปอัตโนมัติ</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css">
+<script>
+  // Apply saved theme before paint to avoid a flash.
+  (function () {
+    try { document.documentElement.dataset.theme = localStorage.getItem('ac_theme') || 'dark'; }
+    catch (e) { document.documentElement.dataset.theme = 'dark'; }
+  })();
+</script>
+<style>
+  /* Activation gate (overlay) */
+  #licenseGate { position:fixed; inset:0; z-index:9999; background:var(--bg);
+    display:none; align-items:center; justify-content:center; padding:24px; overflow:auto; }
+  #licenseGate.show { display:flex; }
+  .lic-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+    max-width:560px; width:100%; padding:36px; color:var(--text); box-shadow:var(--shadow); }
+  .lic-title { font-size:27px; font-weight:800; margin-bottom:8px; }
+  .lic-sub { color:var(--text2); font-size:15px; margin-bottom:24px; line-height:1.6; }
+  .lic-step { font-size:16px; color:var(--text); margin:16px 0 8px; font-weight:600; }
+  .lic-mid { display:flex; gap:10px; align-items:center; background:var(--surface2);
+    border:1px solid var(--border); border-radius:var(--radius-sm); padding:16px; }
+  .lic-mid code { font-size:23px; letter-spacing:2px; color:var(--accent); flex:1; word-break:break-all; }
+  .lic-key { width:100%; min-height:96px; font-size:15px; padding:14px; border-radius:var(--radius-sm);
+    border:1px solid var(--border); background:var(--surface2); color:var(--text); margin:8px 0 0;
+    box-sizing:border-box; font-family:inherit; }
+  .lic-btn { width:100%; padding:18px; font-size:20px; font-weight:800; border:none;
+    border-radius:var(--radius-sm); background:var(--accent); color:var(--on-accent); cursor:pointer; margin-top:16px; }
+  .lic-copy { padding:10px 16px; border-radius:var(--radius-sm); border:1px solid var(--accent);
+    background:transparent; color:var(--accent); cursor:pointer; font-size:14px; white-space:nowrap; }
+  .lic-err { color:var(--danger); font-size:14px; margin-top:12px; min-height:18px; }
+</style>
+</head>
+<body>
+
+<!-- ===== Activation gate ===== -->
+<div id="licenseGate">
+  <div class="lic-card">
+    <div class="lic-title" data-i18n="lic.title">🔐 เปิดใช้งานโปรแกรม</div>
+    <div class="lic-sub" data-i18n="lic.sub">โปรแกรมนี้ใช้ได้เฉพาะเครื่องที่ลงทะเบียน — ทำครั้งเดียว จากนั้นใช้ได้ตลอดแบบออฟไลน์</div>
+    <div class="lic-step" data-i18n="lic.step1">1) ส่ง “รหัสเครื่อง” นี้ให้แอดมิน:</div>
+    <div class="lic-mid">
+      <code id="licMachineId">—</code>
+      <button class="lic-copy" data-i18n="lic.copy" onclick="copyMachineId(this)">คัดลอก</button>
+    </div>
+    <div class="lic-step" data-i18n="lic.step2">2) วางคีย์ที่แอดมินส่งกลับมา แล้วกดเปิดใช้งาน:</div>
+    <textarea class="lic-key" id="licKeyInput" data-i18n-ph="lic.ph" placeholder="วางคีย์เปิดใช้งานที่นี่…"></textarea>
+    <button class="lic-btn" data-i18n="lic.btn" onclick="submitActivation(this)">✅ เปิดใช้งาน</button>
+    <div class="lic-err" id="licErr"></div>
+  </div>
+</div>
+
+<!-- ===== Header ===== -->
+<header>
+  <div class="logo-icon">✂️</div>
+  <div class="logo-block">
+    <div class="logo-text">Auto<span>Cut</span></div>
+    <div class="logo-sub" data-i18n="app.sub">ตัดคลิปอัตโนมัติ</div>
+  </div>
+  <div class="header-actions">
+    <div class="status-dot">
+      <span class="dot" id="statusDot"></span>
+      <span id="statusText" data-i18n="status.connecting">กำลังเชื่อมต่อ…</span>
+    </div>
+    <button class="icon-btn" id="themeBtn" onclick="toggleTheme()" title="theme"><span id="themeIcon">🌙</span></button>
+    <button class="lang-btn" id="langBtn" onclick="toggleLang()">EN</button>
+  </div>
+</header>
+
+<main>
+
+  <!-- Update banner (shown only when a newer signed version is available) -->
+  <div class="card info-card" id="updateBanner" style="display:none;border-color:var(--accent);">
+    <div class="info-emoji">🔔</div>
+    <div class="info-body">
+      <div class="info-v" id="updateText" style="font-weight:600;">—</div>
+    </div>
+    <button type="button" class="upload-btn" id="updateBtn" style="margin:0;" data-i18n="update.btn" onclick="applyUpdate()">อัปเดตเลย</button>
+  </div>
+
+  <!-- Save location -->
+  <div class="card info-card" id="storageCard">
+    <div class="info-emoji">📁</div>
+    <div class="info-body">
+      <div class="info-k" data-i18n="storage.title">โฟลเดอร์เก็บผลลัพธ์</div>
+      <div class="info-v" id="storagePath" data-i18n="storage.loading">กำลังโหลด…</div>
+      <div class="info-accent" id="storageFree"></div>
+    </div>
+    <button type="button" class="upload-btn" id="pickFolderBtn" data-i18n="storage.pick" onclick="pickFolder()" style="margin:0;">เลือกโฟลเดอร์…</button>
+    <button type="button" id="resetFolderBtn" class="ghost-btn" data-i18n="storage.auto" onclick="resetFolder()">อัตโนมัติ</button>
+  </div>
+
+  <!-- Upload -->
+  <div id="uploadSection">
+    <div class="section-label" data-i18n="step1.label">ขั้นตอนที่ 1 — อัปโหลดวิดีโอ</div>
+    <div class="card">
+      <div class="upload-zone" id="dropZone">
+        <input type="file" id="videoInput" accept="video/*,.mkv,.mov,.avi,.webm,.flv,.ts,.m4v,.mpg,.mpeg,.wmv,.3gp" multiple>
+        <div class="upload-icon">🎬</div>
+        <div class="upload-title" data-i18n="upload.title">วางวิดีโอที่นี่</div>
+        <div class="upload-sub" data-i18n="upload.sub">รองรับทุกนามสกุล/ทุก codec — อัปโหลดได้หลายไฟล์พร้อมกัน</div>
+        <div class="upload-btn" data-i18n="upload.btn" onclick="document.getElementById('videoInput').click()">เลือกไฟล์วิดีโอ</div>
+      </div>
+      <div class="file-list" id="fileList"></div>
+    </div>
+
+    <div class="section-label" data-i18n="music.label">เพลงประกอบ (ไม่บังคับ)</div>
+    <div class="card">
+      <div class="upload-zone" id="musicZone" style="padding:32px 24px;">
+        <input type="file" id="musicInput" accept="audio/*">
+        <div class="upload-icon">🎵</div>
+        <div class="upload-title" style="font-size:18px;" data-i18n="music.title">เพิ่มเพลงประกอบ</div>
+        <div class="upload-sub" data-i18n="music.sub">MP3, WAV — เสียงเพลงจะลดลงอัตโนมัติให้ฟังเสียงพูดชัด</div>
+        <div class="upload-btn" data-i18n="music.btn" onclick="document.getElementById('musicInput').click()">เลือกไฟล์เพลง</div>
+      </div>
+      <div id="musicFileName" style="margin-top:12px;font-size:15px;color:var(--accent);"></div>
+    </div>
+
+    <!-- Settings -->
+    <div class="section-label" data-i18n="step2.label">ขั้นตอนที่ 2 — ตั้งค่า</div>
+    <div class="card">
+
+      <div class="setting-item" style="margin-bottom:28px;">
+        <label data-i18n="proj.label">📛 ตั้งชื่อคลิป (ไม่บังคับ)</label>
+        <input type="text" id="projectNameInput" maxlength="60" class="text-input"
+          data-i18n-ph="proj.ph" placeholder="เช่น คลิปของฉัน — เว้นว่างได้ ระบบจะตั้งชื่อให้เอง">
+        <div class="field-hint" data-i18n-html="proj.hint">ใช้เป็นชื่อโฟลเดอร์และชื่อไฟล์ — ถ้าเว้นว่างจะใช้ชื่อ <strong>Project</strong> ตามด้วยวันที่/เวลา</div>
+      </div>
+
+      <div class="settings-grid">
+        <div class="setting-item">
+          <label data-i18n="dur.label">⏱ ความยาวสูงสุดของคลิป</label>
+          <div class="duration-display" id="durationDisplay">60</div>
+          <input type="range" id="durationSlider" min="15" max="180" value="60" step="5"
+            oninput="updateDuration(this.value)">
+          <div class="range-ends"><span data-i18n="dur.min">15 วิ</span><span data-i18n="dur.max">3 นาที</span></div>
+        </div>
+        <div class="setting-item">
+          <label data-i18n="out.label">📦 รูปแบบผลลัพธ์</label>
+          <div class="mode-toggle">
+            <button class="mode-btn active" id="modeZip" onclick="setMode('zip')">
+              <span class="mode-icon">📁</span>
+              <span data-i18n="out.zip.title">แยกเป็นหลายคลิป</span>
+              <small data-i18n="out.zip.sub">ได้คลิปหลายไฟล์ในโฟลเดอร์ Video</small>
+            </button>
+            <button class="mode-btn" id="modeMerged" onclick="setMode('merged')">
+              <span class="mode-icon">🎬</span>
+              <span data-i18n="out.merged.title">รวมเป็นไฟล์เดียว</span>
+              <small data-i18n="out.merged.sub">พร้อมใช้งานทันที</small>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Format -->
+      <div class="opt-block">
+        <label class="opt-title" data-i18n="fmt.label">🎞 นามสกุลไฟล์</label>
+        <div class="btn-row">
+          <button class="fmt-btn active" id="fmt_mp4"  onclick="setFormat('mp4')">MP4<br><small>.mp4</small></button>
+          <button class="fmt-btn" id="fmt_mov"  onclick="setFormat('mov')">MOV<br><small>.mov</small></button>
+          <button class="fmt-btn" id="fmt_avi"  onclick="setFormat('avi')">AVI<br><small>.avi</small></button>
+          <button class="fmt-btn" id="fmt_webm" onclick="setFormat('webm')">WEBM<br><small>.webm</small></button>
+        </div>
+        <div class="field-hint" id="formatNote"></div>
+      </div>
+
+      <!-- Dead Air -->
+      <div class="opt-block">
+        <label class="opt-title" data-i18n="da.label">🤫 ตัดช่วงเงียบ (Dead Air)</label>
+        <div class="toggle-row">
+          <label class="toggle-switch">
+            <input type="checkbox" id="deadAirToggle" checked onchange="onDeadAirToggle()">
+            <span class="toggle-slider"></span>
+          </label>
+          <span class="toggle-label" id="deadAirToggleLabel"></span>
+        </div>
+        <div id="deadAirOptions">
+          <div class="field-hint" style="margin-bottom:12px;" data-i18n="da.hint">ระดับการตัด:</div>
+          <div class="btn-row">
+            <button class="style-btn" id="da_gentle" onclick="setDeadAirAggr('gentle')">
+              <span data-i18n="da.gentle">🍃 เบา</span><small data-i18n="da.gentleSub">ตัดเฉพาะช่วงเงียบยาว</small></button>
+            <button class="style-btn active" id="da_medium" onclick="setDeadAirAggr('medium')">
+              <span data-i18n="da.medium">⚖️ ปานกลาง</span><small data-i18n="da.mediumSub">สมดุล แนะนำ</small></button>
+            <button class="style-btn" id="da_strong" onclick="setDeadAirAggr('strong')">
+              <span data-i18n="da.strong">🔥 เข้ม</span><small data-i18n="da.strongSub">กระชับสุด</small></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Subtitle -->
+      <div class="opt-block">
+        <label class="opt-title" data-i18n="sub.label">📝 Subtitle อัตโนมัติ</label>
+        <div class="toggle-row">
+          <label class="toggle-switch">
+            <input type="checkbox" id="subtitleToggle" onchange="onSubtitleToggle()">
+            <span class="toggle-slider"></span>
+          </label>
+          <span class="toggle-label" id="subtitleToggleLabel"></span>
+        </div>
+        <div id="subtitleOptions" style="display:none;">
+          <div class="field-hint" style="margin-bottom:12px;" data-i18n="sub.styleHint">เลือกสไตล์คำบรรยาย:</div>
+          <div class="btn-row">
+            <button class="style-btn active" id="style_highlight" onclick="setSubtitleStyle('highlight')">
+              <span data-i18n="style.highlight">✨ Highlight</span><small data-i18n="style.highlightSub">ไฮไลต์สีเหลือง</small></button>
+            <button class="style-btn" id="style_pill" onclick="setSubtitleStyle('pill')">
+              <span data-i18n="style.pill">💊 Pill</span><small data-i18n="style.pillSub">กล่องโค้ง อ่านง่าย</small></button>
+            <button class="style-btn" id="style_neon" onclick="setSubtitleStyle('neon')">
+              <span data-i18n="style.neon">🌟 Neon</span><small data-i18n="style.neonSub">เรืองแสง</small></button>
+            <button class="style-btn" id="style_kinetic" onclick="setSubtitleStyle('kinetic')">
+              <span data-i18n="style.kinetic">⚡ Kinetic</span><small data-i18n="style.kineticSub">Pop ขึ้นมา</small></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- L/J cut -->
+      <div class="opt-block">
+        <label class="opt-title" data-i18n="lj.label">🎞 เปลี่ยนฉากแบบมืออาชีพ (L/J cut)</label>
+        <div class="toggle-row">
+          <label class="toggle-switch">
+            <input type="checkbox" id="ljToggle" onchange="onLjToggle()">
+            <span class="toggle-slider"></span>
+          </label>
+          <span class="toggle-label" id="ljToggleLabel"></span>
+        </div>
+        <div id="ljOptions" style="display:none;">
+          <div class="field-hint" style="margin-bottom:12px;" data-i18n-html="lj.hint">เสียงคาบเกี่ยวรอยต่อ ทำให้เปลี่ยนฉากลื่นไหล <strong>(ใช้กับโหมดรวมไฟล์เดียว)</strong></div>
+          <div class="btn-row">
+            <button class="style-btn active" id="lj_l" onclick="setLjMode('l')">
+              <span data-i18n="lj.l">⬅️ L-cut</span><small data-i18n="lj.lSub">เสียงเดิมลากต่อไป</small></button>
+            <button class="style-btn" id="lj_j" onclick="setLjMode('j')">
+              <span data-i18n="lj.j">➡️ J-cut</span><small data-i18n="lj.jSub">เสียงใหม่มาก่อนภาพ</small></button>
+          </div>
+          <div class="setting-item" style="margin-top:18px;">
+            <label data-i18n="lj.overlap">⏱ ระยะคาบเกี่ยวของเสียง</label>
+            <div class="duration-display" id="ljOverlapDisplay">0.50</div>
+            <input type="range" id="ljOverlapSlider" min="0.3" max="0.8" value="0.5" step="0.05"
+              oninput="updateOverlap(this.value)">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Audio extract -->
+    <div class="section-label" data-i18n="audio.sectionLabel">แยกไฟล์เสียง</div>
+    <div class="card">
+      <div class="toggle-row" style="margin-bottom:0;">
+        <label class="toggle-switch">
+          <input type="checkbox" id="audioExtractToggle" onchange="onAudioExtractToggle()">
+          <span class="toggle-slider"></span>
+        </label>
+        <span class="toggle-label" id="audioExtractLabel"></span>
+      </div>
+    </div>
+
+    <button class="process-btn" id="processBtn" onclick="startProcess(0)" disabled data-i18n="btn.process">✂️ ตัดคลิปอัตโนมัติ</button>
+    <button class="process-btn secondary" id="shuffleBtn" onclick="startProcess('shuffle')" disabled data-i18n="btn.shuffle">🎲 สุ่มรูปแบบใหม่ (ฟุตเดิม ได้คลิปแบบใหม่)</button>
+    <div class="error-box" id="errorBox"></div>
+  </div>
+
+  <!-- Progress -->
+  <div class="progress-section" id="progressSection">
+    <div class="time-estimate-box">
+      <div class="time-estimate-header">
+        <span class="icon">⏳</span>
+        <div>
+          <div class="title" data-i18n="prog.title">กำลังประมวลผล — โปรดอย่าปิดหรือรีเฟรชหน้านี้</div>
+          <div class="sub" data-i18n="prog.sub">ระบบทำงานอยู่เบื้องหลัง</div>
+        </div>
+      </div>
+      <div class="countdown-wrap">
+        <div class="countdown-label" data-i18n="timer.label">⏱ เวลาที่ใช้ไป</div>
+        <div class="countdown-timer" id="countdownTimer">00:00</div>
+        <div class="countdown-sub" id="countdownSub"></div>
+      </div>
+      <div id="logFeed" style="display:none;"></div>
+      <div class="warning-banner">
+        <span class="warn-icon">⚠️</span>
+        <div class="warn-text" data-i18n-html="warn">
+          <strong>อย่ารีเฟรชหรือปิดแท็บนี้!</strong><br>ถ้ารีเฟรช งานจะถูกยกเลิกและต้องเริ่มใหม่ทั้งหมด
+        </div>
+      </div>
+    </div>
+
+    <div class="section-label" data-i18n="prog.detail">รายละเอียดการทำงาน</div>
+    <div class="card">
+      <div class="progress-bar-wrap"><div class="progress-bar" id="progressBar"></div></div>
+      <div class="progress-steps" id="progressSteps">
+        <div class="step-item" id="step1">
+          <div class="step-num">1</div>
+          <div><div class="step-label" data-i18n="step1.t">📤 รับวิดีโอ</div><div class="step-sub" data-i18n="step1.s">อัปโหลดไฟล์</div></div>
+        </div>
+        <div class="step-item" id="step2">
+          <div class="step-num">2</div>
+          <div><div class="step-label" data-i18n="step2.t">⚙️ เตรียมไฟล์ + ถอดเสียง</div><div class="step-sub" data-i18n="step2.s">รองรับทุกชนิด แล้วให้ AI ฟังเสียง</div></div>
+        </div>
+        <div class="step-item" id="step3">
+          <div class="step-num">3</div>
+          <div><div class="step-label" data-i18n="step3.t">🧠 วิเคราะห์ช่วงที่ดีที่สุด</div><div class="step-sub" data-i18n="step3.s">เลือกช่วงที่น่าสนใจ</div></div>
+        </div>
+        <div class="step-item" id="step4">
+          <div class="step-num">4</div>
+          <div><div class="step-label" data-i18n="step4.t">✂️ ตัด + ใส่ซับไตเติล</div><div class="step-sub" data-i18n="step4.s">ตัดคลิปและใส่คำบรรยาย</div></div>
+        </div>
+        <div class="step-item" id="step5">
+          <div class="step-num">5</div>
+          <div><div class="step-label" data-i18n="step5.t">💾 บันทึกลงโฟลเดอร์</div><div class="step-sub" data-i18n="step5.s">จัดเก็บผลลัพธ์</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Result -->
+  <div class="result-section" id="resultSection">
+    <div class="section-label" data-i18n="res.label">เสร็จแล้ว! 🎉</div>
+    <div class="card" style="padding:0;border:none;background:none;box-shadow:none;">
+      <div class="result-card">
+        <div class="result-icon">✅</div>
+        <div class="result-title" data-i18n="res.title">บันทึกสำเร็จ!</div>
+        <div class="result-sub" id="resultSub" data-i18n="res.sub">บันทึกคลิปลงโฟลเดอร์เรียบร้อยแล้ว</div>
+        <div class="path-box">
+          <div class="path-label" data-i18n="res.pathLabel">📁 ตำแหน่งไฟล์</div>
+          <div class="path-val" id="resultPath">—</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:12px;">
+          <button class="download-btn" id="openFolderBtn" data-i18n="res.open" onclick="openResultFolder()">📂 เปิดโฟลเดอร์</button>
+          <button class="reset-btn" data-i18n="res.again" onclick="resetAll()">🔄 ตัดคลิปใหม่</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Machine ID -->
+  <div class="card info-card" id="machineCard">
+    <div class="info-emoji">🆔</div>
+    <div class="info-body">
+      <div class="info-k" data-i18n="mc.label">รหัสเครื่องของคุณ (Machine ID) — ใช้ตอนขอคีย์เปิดใช้งาน</div>
+      <div class="info-v" id="machineIdShow" style="font-size:19px;font-weight:700;letter-spacing:1px;color:var(--accent);">—</div>
+    </div>
+    <button type="button" class="upload-btn" style="margin:0;" data-i18n="mc.copy" onclick="copyMachine(this)">คัดลอกรหัสเครื่อง</button>
+  </div>
+
+</main>
+
+<script>
+// Served by Flask → same origin. Opened as file:// → talk to localhost.
+const API = location.protocol === 'file:' ? 'http://localhost:5000' : '';
+
+// =============================================
+//  i18n (Thai default, switchable to English)
+// =============================================
+const I18N = {
+  th: {
+    'app.sub':'ตัดคลิปอัตโนมัติ',
+    'status.connecting':'กำลังเชื่อมต่อ…','status.ready':'พร้อมใช้งาน','status.offline':'ยังไม่ได้เปิดโปรแกรม',
+    'lic.title':'🔐 เปิดใช้งานโปรแกรม',
+    'lic.sub':'โปรแกรมนี้ใช้ได้เฉพาะเครื่องที่ลงทะเบียน — ทำครั้งเดียว จากนั้นใช้ได้ตลอดแบบออฟไลน์',
+    'lic.step1':'1) ส่ง “รหัสเครื่อง” นี้ให้แอดมิน:','lic.copy':'คัดลอก','lic.copied':'คัดลอกแล้ว ✓',
+    'lic.step2':'2) วางคีย์ที่แอดมินส่งกลับมา แล้วกดเปิดใช้งาน:','lic.ph':'วางคีย์เปิดใช้งานที่นี่…',
+    'lic.btn':'✅ เปิดใช้งาน','lic.checking':'กำลังตรวจสอบ…','lic.errEmpty':'กรุณาวางคีย์ก่อน',
+    'lic.errBad':'คีย์ไม่ถูกต้อง','lic.errNet':'เชื่อมต่อไม่ได้ ลองใหม่อีกครั้ง',
+    'storage.title':'โฟลเดอร์เก็บผลลัพธ์','storage.loading':'กำลังโหลด…','storage.pick':'เลือกโฟลเดอร์…',
+    'storage.picking':'กำลังเปิดหน้าต่าง…','storage.auto':'อัตโนมัติ','storage.modeAuto':'อัตโนมัติ','storage.modeCustom':'เลือกเอง',
+    'storage.pickErr':'เลือกโฟลเดอร์ไม่สำเร็จ','storage.pickOpenErr':'เปิดหน้าต่างเลือกโฟลเดอร์ไม่ได้',
+    'step1.label':'ขั้นตอนที่ 1 — อัปโหลดวิดีโอ',
+    'upload.title':'วางวิดีโอที่นี่','upload.sub':'รองรับทุกนามสกุล/ทุก codec — อัปโหลดได้หลายไฟล์พร้อมกัน','upload.btn':'เลือกไฟล์วิดีโอ',
+    'music.label':'เพลงประกอบ (ไม่บังคับ)','music.title':'เพิ่มเพลงประกอบ',
+    'music.sub':'MP3, WAV — เสียงเพลงจะลดลงอัตโนมัติให้ฟังเสียงพูดชัด','music.btn':'เลือกไฟล์เพลง',
+    'step2.label':'ขั้นตอนที่ 2 — ตั้งค่า',
+    'proj.label':'📛 ตั้งชื่อคลิป (ไม่บังคับ)','proj.ph':'เช่น คลิปของฉัน — เว้นว่างได้ ระบบจะตั้งชื่อให้เอง',
+    'proj.hint':'ใช้เป็นชื่อโฟลเดอร์และชื่อไฟล์ — ถ้าเว้นว่างจะใช้ชื่อ <strong>Project</strong> ตามด้วยวันที่/เวลา',
+    'dur.label':'⏱ ความยาวสูงสุดของคลิป','unit.seconds':'วินาที','dur.min':'15 วิ','dur.max':'3 นาที',
+    'out.label':'📦 รูปแบบผลลัพธ์','out.zip.title':'แยกเป็นหลายคลิป','out.zip.sub':'ได้คลิปหลายไฟล์ในโฟลเดอร์ Video',
+    'out.merged.title':'รวมเป็นไฟล์เดียว','out.merged.sub':'พร้อมใช้งานทันที',
+    'fmt.label':'🎞 นามสกุลไฟล์',
+    'fmt.note.mp4':'MP4 — รองรับทุกแพลตฟอร์ม ไฟล์เล็ก แนะนำสำหรับทั่วไป',
+    'fmt.note.mov':'MOV — เหมาะกับ macOS / Final Cut / iPhone',
+    'fmt.note.avi':'AVI — เหมาะกับ Windows (ไฟล์ใหญ่กว่า MP4)',
+    'fmt.note.webm':'WEBM — เหมาะกับเว็บ / YouTube',
+    'da.label':'🤫 ตัดช่วงเงียบ (Dead Air)','da.on':'✅ เปิด — ตัดช่วงที่ไม่มีคนพูดออก ให้คลิปกระชับ',
+    'da.off':'ปิด — เก็บทุกช่วงรวมถึงช่วงเงียบ','da.hint':'ระดับการตัด:',
+    'da.gentle':'🍃 เบา','da.gentleSub':'ตัดเฉพาะช่วงเงียบยาว','da.medium':'⚖️ ปานกลาง','da.mediumSub':'สมดุล แนะนำ',
+    'da.strong':'🔥 เข้ม','da.strongSub':'กระชับสุด',
+    'sub.label':'📝 Subtitle อัตโนมัติ','sub.on':'✅ เปิด — ขึ้นคำบรรยายให้อัตโนมัติ','sub.off':'ปิด — ไม่ใส่ subtitle',
+    'sub.styleHint':'เลือกสไตล์คำบรรยาย:',
+    'style.highlight':'✨ Highlight','style.highlightSub':'ไฮไลต์สีเหลือง','style.pill':'💊 Pill','style.pillSub':'กล่องโค้ง อ่านง่าย',
+    'style.neon':'🌟 Neon','style.neonSub':'เรืองแสง','style.kinetic':'⚡ Kinetic','style.kineticSub':'Pop ขึ้นมา',
+    'lj.label':'🎞 เปลี่ยนฉากแบบมืออาชีพ (L/J cut)','lj.on':'✅ เปิด — เสียงคาบเกี่ยวรอยต่อ ฉากเปลี่ยนลื่นไหล',
+    'lj.off':'ปิด — ตัดต่อแบบตรง ๆ (hard cut)',
+    'lj.hint':'เสียงคาบเกี่ยวรอยต่อ ทำให้เปลี่ยนฉากลื่นไหล <strong>(ใช้กับโหมดรวมไฟล์เดียว)</strong>',
+    'lj.l':'⬅️ L-cut','lj.lSub':'เสียงเดิมลากต่อไป','lj.j':'➡️ J-cut','lj.jSub':'เสียงใหม่มาก่อนภาพ',
+    'lj.overlap':'⏱ ระยะคาบเกี่ยวของเสียง',
+    'audio.sectionLabel':'แยกไฟล์เสียง','audio.on':'✅ เปิด — สร้างโฟลเดอร์ mp3 พร้อมไฟล์เสียง','audio.off':'ปิด — ไม่แยกไฟล์เสียง',
+    'btn.process':'✂️ ตัดคลิปอัตโนมัติ','btn.shuffle':'🎲 สุ่มรูปแบบใหม่ (ฟุตเดิม ได้คลิปแบบใหม่)',
+    'prog.title':'กำลังประมวลผล — โปรดอย่าปิดหรือรีเฟรชหน้านี้','prog.sub':'ระบบทำงานอยู่เบื้องหลัง',
+    'timer.label':'⏱ เวลาที่ใช้ไป','prog.start':'กำลังเริ่ม...','prog.uploading':'กำลังอัปโหลด...','prog.saved':'✅ บันทึกไฟล์เรียบร้อย',
+    'warn':'<strong>อย่ารีเฟรชหรือปิดแท็บนี้!</strong><br>ถ้ารีเฟรช งานจะถูกยกเลิกและต้องเริ่มใหม่ทั้งหมด',
+    'prog.detail':'รายละเอียดการทำงาน',
+    'step1.t':'📤 รับวิดีโอ','step1.s':'อัปโหลดไฟล์','step2.t':'⚙️ เตรียมไฟล์ + ถอดเสียง','step2.s':'รองรับทุกชนิด แล้วให้ AI ฟังเสียง',
+    'step3.t':'🧠 วิเคราะห์ช่วงที่ดีที่สุด','step3.s':'เลือกช่วงที่น่าสนใจ','step4.t':'✂️ ตัด + ใส่ซับไตเติล','step4.s':'ตัดคลิปและใส่คำบรรยาย',
+    'step5.t':'💾 บันทึกลงโฟลเดอร์','step5.s':'จัดเก็บผลลัพธ์',
+    'res.label':'เสร็จแล้ว! 🎉','res.title':'บันทึกสำเร็จ!','res.sub':'บันทึกคลิปลงโฟลเดอร์เรียบร้อยแล้ว',
+    'res.subDone':'🎬 บันทึกลงโฟลเดอร์ “{name}” แล้ว','res.pathLabel':'📁 ตำแหน่งไฟล์',
+    'res.open':'📂 เปิดโฟลเดอร์','res.opening':'กำลังเปิด…','res.again':'🔄 ตัดคลิปใหม่',
+    'mc.label':'รหัสเครื่องของคุณ (Machine ID) — ใช้ตอนขอคีย์เปิดใช้งาน','mc.copy':'คัดลอกรหัสเครื่อง','mc.copied':'คัดลอกแล้ว ✓',
+    'err.start':'เริ่มงานไม่สำเร็จ','err.fetch':'เชื่อมต่อ server ไม่ได้','err.generic':'เกิดข้อผิดพลาดระหว่างประมวลผล',
+    'update.available':'🔔 มีอัปเดตเวอร์ชันใหม่ ({v})','update.btn':'อัปเดตเลย','update.applying':'กำลังอัปเดต…',
+    'update.done':'✅ อัปเดตแล้ว — ปิดโปรแกรมแล้วเปิดใหม่เพื่อใช้เวอร์ชันใหม่','update.fail':'อัปเดตไม่สำเร็จ',
+  },
+  en: {
+    'app.sub':'Automatic clip cutter',
+    'status.connecting':'Connecting…','status.ready':'Ready','status.offline':'App not running',
+    'lic.title':'🔐 Activate',
+    'lic.sub':'This app runs only on a registered machine — activate once, then use it offline forever.',
+    'lic.step1':'1) Send this Machine ID to the admin:','lic.copy':'Copy','lic.copied':'Copied ✓',
+    'lic.step2':'2) Paste the key from the admin, then activate:','lic.ph':'Paste your activation key here…',
+    'lic.btn':'✅ Activate','lic.checking':'Checking…','lic.errEmpty':'Please paste a key first',
+    'lic.errBad':'Invalid key','lic.errNet':'Connection failed, try again',
+    'storage.title':'Save location','storage.loading':'Loading…','storage.pick':'Choose folder…',
+    'storage.picking':'Opening…','storage.auto':'Auto','storage.modeAuto':'auto','storage.modeCustom':'custom',
+    'storage.pickErr':'Could not select folder','storage.pickOpenErr':'Could not open the folder dialog',
+    'step1.label':'Step 1 — Upload video',
+    'upload.title':'Drop your videos here','upload.sub':'Any format / codec — upload multiple files at once','upload.btn':'Choose video files',
+    'music.label':'Background music (optional)','music.title':'Add background music',
+    'music.sub':'MP3, WAV — music is auto-ducked so speech stays clear','music.btn':'Choose music file',
+    'step2.label':'Step 2 — Settings',
+    'proj.label':'📛 Name your clips (optional)','proj.ph':'e.g. My clip — leave blank to auto-name',
+    'proj.hint':'Used for the folder and file names — if blank, uses <strong>Project</strong> + date/time',
+    'dur.label':'⏱ Max clip length','unit.seconds':'seconds','dur.min':'15s','dur.max':'3 min',
+    'out.label':'📦 Output format','out.zip.title':'Separate clips','out.zip.sub':'Multiple files in the Video folder',
+    'out.merged.title':'One merged file','out.merged.sub':'Ready to use right away',
+    'fmt.label':'🎞 File type',
+    'fmt.note.mp4':'MP4 — works everywhere, small files, recommended',
+    'fmt.note.mov':'MOV — great for macOS / Final Cut / iPhone',
+    'fmt.note.avi':'AVI — good for Windows (larger than MP4)',
+    'fmt.note.webm':'WEBM — good for web / YouTube',
+    'da.label':'🤫 Trim silence (dead air)','da.on':'✅ On — cut out silent gaps for a tighter clip',
+    'da.off':'Off — keep everything, including silence','da.hint':'Trim level:',
+    'da.gentle':'🍃 Gentle','da.gentleSub':'Only long silences','da.medium':'⚖️ Medium','da.mediumSub':'Balanced, recommended',
+    'da.strong':'🔥 Strong','da.strongSub':'Tightest','sub.styleHint':'Choose a caption style:',
+    'sub.label':'📝 Auto subtitles','sub.on':'✅ On — add captions automatically','sub.off':'Off — no subtitles',
+    'style.highlight':'✨ Highlight','style.highlightSub':'Yellow highlight','style.pill':'💊 Pill','style.pillSub':'Rounded, easy to read',
+    'style.neon':'🌟 Neon','style.neonSub':'Glowing','style.kinetic':'⚡ Kinetic','style.kineticSub':'Pops up',
+    'lj.label':'🎞 Pro scene transitions (L/J cut)','lj.on':'✅ On — audio overlaps each cut for smooth transitions',
+    'lj.off':'Off — straight hard cuts',
+    'lj.hint':'Audio overlaps each cut for smooth transitions <strong>(merged mode only)</strong>',
+    'lj.l':'⬅️ L-cut','lj.lSub':'Old audio carries over','lj.j':'➡️ J-cut','lj.jSub':'New audio leads the picture',
+    'lj.overlap':'⏱ Audio overlap',
+    'audio.sectionLabel':'Audio export','audio.on':'✅ On — create an mp3 folder with the audio','audio.off':'Off — no separate audio',
+    'btn.process':'✂️ Auto-cut','btn.shuffle':'🎲 Shuffle a new version (same footage)',
+    'prog.title':"Processing — please don't close or refresh this page",'prog.sub':'Working in the background',
+    'timer.label':'⏱ Time elapsed','prog.start':'Starting…','prog.uploading':'Uploading…','prog.saved':'✅ Files saved',
+    'warn':"<strong>Don't refresh or close this tab!</strong><br>Refreshing cancels the job and you'll start over.",
+    'prog.detail':'Details',
+    'step1.t':'📤 Receive video','step1.s':'Uploading files','step2.t':'⚙️ Prepare + transcribe','step2.s':'Handle any format, then AI listens',
+    'step3.t':'🧠 Find the best moments','step3.s':'Pick the interesting parts','step4.t':'✂️ Cut + subtitles','step4.s':'Cut clips and add captions',
+    'step5.t':'💾 Save to folder','step5.s':'Store the result',
+    'res.label':'Done! 🎉','res.title':'Saved!','res.sub':'Your clips have been saved to a folder',
+    'res.subDone':'🎬 Saved to folder “{name}”','res.pathLabel':'📁 File location',
+    'res.open':'📂 Open folder','res.opening':'Opening…','res.again':'🔄 Cut another',
+    'mc.label':'Your Machine ID — used to request an activation key','mc.copy':'Copy Machine ID','mc.copied':'Copied ✓',
+    'err.start':'Could not start the job','err.fetch':'Could not reach the server','err.generic':'An error occurred while processing',
+    'update.available':'🔔 A new version is available ({v})','update.btn':'Update now','update.applying':'Updating…',
+    'update.done':'✅ Updated — close and reopen the app to use the new version','update.fail':'Update failed',
+  },
+};
+let lang = (function(){ try { return localStorage.getItem('ac_lang') || 'th'; } catch(e){ return 'th'; } })();
+function t(key){ const d = I18N[lang] || I18N.th; return (key in d) ? d[key] : (I18N.th[key] != null ? I18N.th[key] : key); }
+
+function applyLang() {
+  document.documentElement.lang = lang;
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.getAttribute('data-i18n')); });
+  document.querySelectorAll('[data-i18n-html]').forEach(el => { el.innerHTML = t(el.getAttribute('data-i18n-html')); });
+  document.querySelectorAll('[data-i18n-ph]').forEach(el => { el.placeholder = t(el.getAttribute('data-i18n-ph')); });
+  document.getElementById('langBtn').textContent = lang === 'th' ? 'EN' : 'ไทย';
+  refreshDynamic();
+}
+function toggleLang() {
+  lang = lang === 'th' ? 'en' : 'th';
+  try { localStorage.setItem('ac_lang', lang); } catch(e){}
+  applyLang();
+}
+// Re-render everything that JS sets dynamically (so language switch updates it too).
+function refreshDynamic() {
+  onDeadAirToggle(); onSubtitleToggle(); onLjToggle(); onAudioExtractToggle();
+  updateDuration(document.getElementById('durationSlider').value);
+  updateOverlap(document.getElementById('ljOverlapSlider').value);
+  setFormat(selectedFormat);
+  applyStatus(lastOnline);
+  if (lastStorageInfo) renderStorage(lastStorageInfo);
+  if (pendingUpdate && document.getElementById('updateBanner').style.display !== 'none')
+    document.getElementById('updateText').textContent = t('update.available').replace('{v}', pendingUpdate.latest || '');
+}
+
+// =============================================
+//  Theme
+// =============================================
+function setThemeIcon() {
+  document.getElementById('themeIcon').textContent =
+    document.documentElement.dataset.theme === 'dark' ? '☀️' : '🌙';
+}
+function toggleTheme() {
+  const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = next;
+  try { localStorage.setItem('ac_theme', next); } catch(e){}
+  setThemeIcon();
+}
+
+// =============================================
+//  State
+// =============================================
+let selectedVideos = [];
+let selectedMusic  = null;
+let outputMode     = 'zip';
+let selectedFormat = 'mp4';
+let subtitleStyle  = 'highlight';
+let ljCutMode      = 'l';
+let deadAirAggr    = 'medium';
+let subtitleOn = false, ljCutOn = false, deadAirOn = true, audioExtractOn = false;
+let resultDir = null;
+let lastOnline = false, lastStorageInfo = null;
+let pendingUpdate = null;
+
+let pollTimer = null, elapsedTimer = null, startTime = null, currentJob = null;
+
+function fmtTime(sec) {
+  if (sec < 0) sec = 0;
+  const m = Math.floor(sec / 60), s = Math.floor(sec % 60);
+  return String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+}
+
+// =============================================
+//  Server online indicator
+// =============================================
+function applyStatus(online) {
+  lastOnline = online;
+  document.getElementById('statusDot').className = 'dot' + (online ? ' online' : '');
+  document.getElementById('statusText').textContent = online ? t('status.ready') : t('status.offline');
+}
+async function checkStatus() {
+  try {
+    const r = await fetch(API + '/health', { cache: 'no-store' });
+    if (!r.ok) throw 0;
+    applyStatus(true);
+  } catch { applyStatus(false); }
+}
+
+// =============================================
+//  Save location
+// =============================================
+function renderStorage(info) {
+  if (!info || !info.data_dir) return;
+  lastStorageInfo = info;
+  document.getElementById('storagePath').textContent = info.output_root || info.data_dir;
+  document.getElementById('storageFree').textContent =
+    (lang === 'th' ? `ว่าง ${info.free_gb} GB` : `${info.free_gb} GB free`) +
+    ' · ' + (info.custom ? t('storage.modeCustom') : t('storage.modeAuto'));
+}
+async function loadStorage() {
+  try { renderStorage(await (await fetch(API + '/settings', { cache:'no-store' })).json()); } catch {}
+}
+async function pickFolder() {
+  const btn = document.getElementById('pickFolderBtn');
+  const old = btn.textContent; btn.textContent = t('storage.picking'); btn.disabled = true;
+  try {
+    const d = await (await fetch(API + '/pick-folder', { method:'POST' })).json();
+    if (d.ok) renderStorage(d);
+    else if (!d.cancelled) showError(d.error || t('storage.pickErr'));
+  } catch { showError(t('storage.pickOpenErr')); }
+  finally { btn.textContent = old; btn.disabled = false; }
+}
+async function resetFolder() {
+  try { renderStorage(await (await fetch(API + '/settings/reset', { method:'POST' })).json()); } catch {}
+}
+
+// =============================================
+//  Activation
+// =============================================
+async function checkLicense() {
+  try {
+    const d = await (await fetch(API + '/license/status', { cache:'no-store' })).json();
+    document.getElementById('licMachineId').textContent = d.machine_id || '—';
+    document.getElementById('machineIdShow').textContent = d.machine_id || '—';
+    if (d.activated) hideLicenseGate(); else showLicenseGate();
+  } catch {}
+}
+function copyMachine(btn){ copyText(document.getElementById('machineIdShow').textContent, btn, 'mc.copied'); }
+function copyMachineId(btn){ copyText(document.getElementById('licMachineId').textContent, btn, 'lic.copied'); }
+function copyText(text, btn, doneKey){
+  if (navigator.clipboard) navigator.clipboard.writeText(text);
+  const o = btn.textContent; btn.textContent = t(doneKey);
+  setTimeout(() => btn.textContent = o, 1300);
+}
+function showLicenseGate(){ document.getElementById('licenseGate').classList.add('show'); }
+function hideLicenseGate(){ document.getElementById('licenseGate').classList.remove('show'); }
+async function submitActivation(btn){
+  const key = document.getElementById('licKeyInput').value.trim();
+  const err = document.getElementById('licErr'); err.textContent = '';
+  if (!key) { err.textContent = t('lic.errEmpty'); return; }
+  btn.disabled = true; const o = btn.textContent; btn.textContent = t('lic.checking');
+  try {
+    const d = await (await fetch(API + '/license/activate', {
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ key })
+    })).json();
+    if (d.activated) hideLicenseGate(); else err.textContent = d.error || t('lic.errBad');
+  } catch { err.textContent = t('lic.errNet'); }
+  finally { btn.disabled = false; btn.textContent = o; }
+}
+
+// =============================================
+//  Upload handlers
+// =============================================
+const dropZone = document.getElementById('dropZone');
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('drag-over');
+  handleFiles([...e.dataTransfer.files].filter(isVideoFile));
+});
+document.getElementById('videoInput').addEventListener('change', e => handleFiles([...e.target.files]));
+document.getElementById('musicInput').addEventListener('change', e => {
+  selectedMusic = e.target.files[0];
+  document.getElementById('musicFileName').textContent = selectedMusic ? '🎵 ' + selectedMusic.name : '';
+});
+function isVideoFile(f) {
+  if (f.type && f.type.startsWith('video/')) return true;
+  return /\.(mp4|mov|mkv|avi|webm|flv|ts|m4v|mpg|mpeg|wmv|3gp)$/i.test(f.name);
+}
+function handleFiles(files) { selectedVideos = [...selectedVideos, ...files]; renderFileList(); }
+function renderFileList() {
+  document.getElementById('fileList').innerHTML = selectedVideos.map((f,i) => `
+    <div class="file-item">
+      <span style="font-size:22px;">🎬</span>
+      <span class="file-name">${f.name}</span>
+      <span class="file-size">${(f.size/1024/1024).toFixed(1)} MB</span>
+      <button class="file-remove" onclick="removeFile(${i})">✕</button>
+    </div>`).join('');
+  const has = selectedVideos.length > 0;
+  document.getElementById('processBtn').disabled = !has;
+  document.getElementById('shuffleBtn').disabled = !has;
+}
+function removeFile(i) { selectedVideos.splice(i,1); renderFileList(); }
+
+// =============================================
+//  Option controls
+// =============================================
+function onSubtitleToggle() {
+  subtitleOn = document.getElementById('subtitleToggle').checked;
+  document.getElementById('subtitleToggleLabel').textContent = subtitleOn ? t('sub.on') : t('sub.off');
+  document.getElementById('subtitleOptions').style.display = subtitleOn ? 'block' : 'none';
+}
+function setSubtitleStyle(s) {
+  subtitleStyle = s;
+  ['highlight','pill','neon','kinetic'].forEach(x =>
+    document.getElementById('style_'+x).className = 'style-btn' + (x === s ? ' active' : ''));
+}
+function onLjToggle() {
+  ljCutOn = document.getElementById('ljToggle').checked;
+  document.getElementById('ljToggleLabel').textContent = ljCutOn ? t('lj.on') : t('lj.off');
+  document.getElementById('ljOptions').style.display = ljCutOn ? 'block' : 'none';
+}
+function setLjMode(m) {
+  ljCutMode = m;
+  ['l','j'].forEach(x => document.getElementById('lj_'+x).className = 'style-btn' + (x === m ? ' active' : ''));
+}
+function onDeadAirToggle() {
+  deadAirOn = document.getElementById('deadAirToggle').checked;
+  document.getElementById('deadAirToggleLabel').textContent = deadAirOn ? t('da.on') : t('da.off');
+  document.getElementById('deadAirOptions').style.display = deadAirOn ? 'block' : 'none';
+}
+function setDeadAirAggr(a) {
+  deadAirAggr = a;
+  ['gentle','medium','strong'].forEach(x =>
+    document.getElementById('da_'+x).className = 'style-btn' + (x === a ? ' active' : ''));
+}
+function onAudioExtractToggle() {
+  audioExtractOn = document.getElementById('audioExtractToggle').checked;
+  document.getElementById('audioExtractLabel').textContent = audioExtractOn ? t('audio.on') : t('audio.off');
+}
+function setMode(mode) {
+  outputMode = mode;
+  document.getElementById('modeZip').className    = 'mode-btn' + (mode==='zip'    ? ' active' : '');
+  document.getElementById('modeMerged').className = 'mode-btn' + (mode==='merged' ? ' active' : '');
+}
+function setFormat(fmt) {
+  selectedFormat = fmt;
+  ['mp4','mov','avi','webm'].forEach(f =>
+    document.getElementById('fmt_'+f).className = 'fmt-btn' + (f===fmt ? ' active' : ''));
+  document.getElementById('formatNote').textContent = t('fmt.note.' + fmt);
+}
+function updateDuration(v) { document.getElementById('durationDisplay').textContent = v + ' ' + t('unit.seconds'); }
+function updateOverlap(v)  { document.getElementById('ljOverlapDisplay').textContent = Number(v).toFixed(2) + ' ' + t('unit.seconds'); }
+
+// =============================================
+//  Progress UI
+// =============================================
+function setStep(n, state) {
+  const el = document.getElementById('step'+n);
+  el.className = 'step-item ' + state;
+  const old = el.querySelector('.step-spinner,.step-check');
+  if (old) old.remove();
+  if (state==='active') el.insertAdjacentHTML('beforeend','<div class="step-spinner"><div class="spinner"></div></div>');
+  else if (state==='done') el.insertAdjacentHTML('beforeend','<div class="step-check">✓</div>');
+}
+function setProgress(pct) { document.getElementById('progressBar').style.width = pct+'%'; }
+const STEP_RANGES = [ [1,0,10], [2,10,50], [3,50,62], [4,62,90], [5,90,100] ];
+function updateSteps(pct) {
+  for (const [n, lo, hi] of STEP_RANGES) {
+    if (pct >= hi) setStep(n,'done');
+    else if (pct >= lo) setStep(n,'active');
+    else setStep(n,'');
+  }
+}
+
+// =============================================
+//  Main process — start job + poll
+// =============================================
+async function startProcess(mode) {
+  if (!selectedVideos.length) return;
+  const variation = mode === 'shuffle' ? (Date.now() % 1000000) + 1 : 0;
+  document.getElementById('errorBox').className = 'error-box';
+  document.getElementById('uploadSection').style.display = 'none';
+  document.getElementById('progressSection').className = 'progress-section show';
+  setProgress(0); updateSteps(0);
+  resultDir = null;
+  document.getElementById('countdownTimer').classList.remove('done');
+  document.getElementById('countdownTimer').textContent = '00:00';
+  document.getElementById('countdownSub').textContent = t('prog.uploading');
+
+  const formData = new FormData();
+  selectedVideos.forEach(v => formData.append('videos', v));
+  if (selectedMusic) formData.append('music', selectedMusic);
+  formData.append('max_duration',   document.getElementById('durationSlider').value);
+  formData.append('output_mode',    outputMode);
+  formData.append('output_format',  selectedFormat);
+  formData.append('subtitle_on',    subtitleOn ? 'true' : 'false');
+  formData.append('subtitle_style', subtitleStyle);
+  formData.append('lj_cut_on',      ljCutOn ? 'true' : 'false');
+  formData.append('lj_cut_mode',    ljCutMode);
+  formData.append('lj_overlap',     document.getElementById('ljOverlapSlider').value);
+  formData.append('dead_air_on',    deadAirOn ? 'true' : 'false');
+  formData.append('dead_air_aggr',  deadAirAggr);
+  formData.append('variation',      String(variation));
+  formData.append('audio_extract',  audioExtractOn ? 'true' : 'false');
+  formData.append('project_name',   document.getElementById('projectNameInput').value.trim());
+
+  try {
+    const res = await fetch(API + '/process', { method:'POST', body: formData });
+    const data = await res.json();
+    if (res.status === 403 && data.need_activation) { showLicenseGate(); return; }
+    if (!res.ok) throw new Error(data.error || t('err.start'));
+    currentJob = data.job_id;
+
+    // Count-up timer.
+    startTime = Date.now();
+    clearInterval(elapsedTimer);
+    elapsedTimer = setInterval(() => {
+      document.getElementById('countdownTimer').textContent = fmtTime((Date.now() - startTime) / 1000);
+    }, 1000);
+
+    clearInterval(pollTimer);
+    pollTimer = setInterval(poll, 1500);
+    poll();
+  } catch (err) { showError(err.message); }
+}
+
+async function poll() {
+  if (!currentJob) return;
+  let s;
+  try {
+    const r = await fetch(API + '/status/' + currentJob, { cache:'no-store' });
+    s = await r.json();
+    if (!r.ok) throw new Error(s.error || t('err.fetch'));
+  } catch (err) { return; }
+
+  setProgress(s.pct || 0);
+  updateSteps(s.pct || 0);
+  document.getElementById('countdownSub').textContent = s.stage ? '🔧 ' + s.stage : '';
+
+  if (s.status === 'done') {
+    clearInterval(pollTimer); clearInterval(elapsedTimer);
+    setProgress(100); updateSteps(100);
+    document.getElementById('countdownTimer').classList.add('done');
+    document.getElementById('countdownSub').textContent = t('prog.saved');
+    handleDone(s);
+  } else if (s.status === 'error') {
+    clearInterval(pollTimer); clearInterval(elapsedTimer);
+    showError(s.error || t('err.generic'));
+  }
+}
+
+function handleDone(s) {
+  resultDir = s.output_dir || null;
+  document.getElementById('progressSection').className = 'progress-section';
+  document.getElementById('resultSection').className   = 'result-section show';
+  document.getElementById('resultPath').textContent = resultDir || '—';
+  document.getElementById('resultSub').textContent = t('res.subDone').replace('{name}', s.output_name || '');
+  openResultFolder();  // pop File Explorer straight to the saved clips
+}
+
+async function openResultFolder() {
+  if (!currentJob) return;
+  const btn = document.getElementById('openFolderBtn');
+  const old = btn.textContent; btn.textContent = t('res.opening');
+  try { await fetch(API + '/open-folder/' + currentJob, { method:'POST' }); } catch {}
+  finally { setTimeout(() => { btn.textContent = old; }, 800); }
+}
+
+function showError(msg) {
+  clearInterval(pollTimer); clearInterval(elapsedTimer);
+  document.getElementById('progressSection').className = 'progress-section';
+  document.getElementById('uploadSection').style.display = 'block';
+  const eb = document.getElementById('errorBox');
+  eb.className = 'error-box show';
+  eb.textContent = '❌ ' + msg;
+}
+
+// =============================================
+//  Reset
+// =============================================
+function resetAll() {
+  clearInterval(pollTimer); clearInterval(elapsedTimer);
+  currentJob = null; resultDir = null;
+  selectedVideos = []; selectedMusic = null;
+  setFormat('mp4'); setMode('zip');
+  document.getElementById('fileList').innerHTML = '';
+  document.getElementById('musicFileName').textContent = '';
+  document.getElementById('projectNameInput').value = '';
+  document.getElementById('durationSlider').value = 60; updateDuration(60);
+  document.getElementById('processBtn').disabled = true;
+  document.getElementById('shuffleBtn').disabled = true;
+  document.getElementById('resultSection').className = 'result-section';
+  document.getElementById('uploadSection').style.display = 'block';
+  document.getElementById('countdownTimer').classList.remove('done');
+  document.getElementById('countdownTimer').textContent = '00:00';
+  document.getElementById('logFeed').innerHTML = '';
+  updateSteps(0); setProgress(0);
+}
+
+window.addEventListener('beforeunload', e => {
+  if (currentJob && document.getElementById('progressSection').classList.contains('show')) {
+    e.preventDefault();
+    e.returnValue = 'processing';
+  }
+});
+
+// =============================================
+//  Auto-update (signed patches)
+// =============================================
+async function checkUpdate() {
+  try {
+    const d = await (await fetch(API + '/update/status', { cache:'no-store' })).json();
+    if (d && d.available) {
+      pendingUpdate = d;
+      document.getElementById('updateText').textContent = t('update.available').replace('{v}', d.latest || '');
+      document.getElementById('updateBanner').style.display = 'flex';
+    }
+  } catch {}
+}
+async function applyUpdate() {
+  const btn = document.getElementById('updateBtn');
+  btn.disabled = true; const o = btn.textContent; btn.textContent = t('update.applying');
+  try {
+    const d = await (await fetch(API + '/update/apply', { method:'POST' })).json();
+    if (d.ok) { document.getElementById('updateText').textContent = t('update.done'); btn.style.display = 'none'; }
+    else { btn.disabled = false; btn.textContent = o; showError(d.error || t('update.fail')); }
+  } catch { btn.disabled = false; btn.textContent = o; showError(t('update.fail')); }
+}
+
+// =============================================
+//  Init
+// =============================================
+setThemeIcon();
+setFormat('mp4');
+setMode('zip');
+applyLang();
+checkStatus();
+setInterval(checkStatus, 5000);
+loadStorage();
+checkLicense();
+checkUpdate();
+</script>
+</body>
+</html>

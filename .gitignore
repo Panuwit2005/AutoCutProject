@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.venv/
+build/
+dist/
+release/
+packaging/.buildvenv/
+packaging/payload/
+packaging/admin_private_key.pem
+packaging/_genkeypair.py
