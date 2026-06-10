@@ -188,6 +188,12 @@ def pick_folder():
 
 @app.route("/license/status")
 def license_status():
+    # Best-effort: sync the admin kill-switch list when online (never blocks
+    # offline use — a failure leaves the saved state untouched).
+    try:
+        licensing.refresh_revocation()
+    except Exception:  # noqa: BLE001
+        pass
     return jsonify(licensing.status())
 
 

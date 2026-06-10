@@ -101,6 +101,20 @@ class KeygenTab:
                                   font=("Segoe UI", 11), pady=8, state="disabled")
         self.copy_btn.pack(fill="x")
 
+        # --- Kill switch: revoke / un-revoke a key by Machine ID -------------
+        tk.Frame(box, bg="#2a2a3a", height=1).pack(fill="x", pady=(18, 8))
+        tk.Label(box, text="🚫 ระงับ / ปลดระงับคีย์ (ใช้ Machine ID ช่องบนสุด)", bg=BG,
+                 fg="#ddd", font=("Segoe UI", 10, "bold")).pack(anchor="w")
+        kill = tk.Frame(box, bg=BG); kill.pack(fill="x", pady=(8, 0))
+        tk.Button(kill, text="🚫 ระงับคีย์นี้ทันที", command=lambda: self._revoke(True),
+                  bg="#3a1620", fg="#ff8c94", relief="flat", cursor="hand2", bd=0,
+                  activebackground="#4a1c28", activeforeground="#ff8c94",
+                  font=("Segoe UI", 10, "bold"), padx=16, pady=8).pack(side="left", padx=(0, 8))
+        tk.Button(kill, text="✅ ปลดระงับ", command=lambda: self._revoke(False),
+                  bg="#10242f", fg=ACC, relief="flat", cursor="hand2", bd=0,
+                  activebackground="#16323f", activeforeground=ACC,
+                  font=("Segoe UI", 10, "bold"), padx=16, pady=8).pack(side="left")
+
         self.status = tk.Label(box, text="", bg=BG, fg="#ff6b6b",
                                font=("Segoe UI", 10), wraplength=500, justify="left")
         self.status.pack(anchor="w", pady=(12, 0))
@@ -117,6 +131,31 @@ class KeygenTab:
 
     def _err(self, msg: str): self.status.config(fg="#ff6b6b", text="⚠️ " + msg)
     def _ok(self, msg: str): self.status.config(fg="#00E5A0", text="✓ " + msg)
+
+    def _revoke(self, revoke: bool):
+        """Add/remove the Machine ID from the signed revocation list (kill switch)."""
+        if self.priv is None:
+            self._err("ไม่มีกุญแจสำหรับเซ็นรายการระงับ"); return
+        mid = self.mid.get().strip().upper()
+        if not mid:
+            self._err("กรอก Machine ID ของลูกค้าก่อน (ช่องบนสุด)"); return
+        action = "ระงับ" if revoke else "ปลดระงับ"
+        if not messagebox.askyesno(f"ยืนยันการ{action}",
+                f"ยืนยัน{action}คีย์ของเครื่อง:\n{mid}\n\n"
+                "⚠️ ต้อง Push ไฟล์ขึ้น GitHub ถึงจะมีผล (และมีผลตอนลูกค้าออนไลน์)"):
+            return
+        out = os.path.join(_project_root(), "update")
+        ids = updater.read_revocation_ids(out)
+        if revoke and mid not in ids:
+            ids.append(mid)
+        elif not revoke:
+            ids = [x for x in ids if x != mid]
+        try:
+            updater.build_revocation(out, ids, self.priv.sign)
+        except Exception as e:  # noqa: BLE001
+            self._err(f"{action}ไม่สำเร็จ: {e}"); return
+        self._ok(f"{action}เครื่อง {mid} แล้ว · รวม {len(ids)} เครื่องในรายการ — "
+                 "กด Push ขึ้น GitHub เพื่อให้มีผล")
 
     def _set_rent(self, days):
         """Fill the expiry field with today + *days* (or clear it for lifetime)."""

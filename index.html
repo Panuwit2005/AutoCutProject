@@ -405,6 +405,7 @@ const I18N = {
     'lic.step2':'2) วางคีย์ที่แอดมินส่งกลับมา แล้วกดเปิดใช้งาน:','lic.ph':'วางคีย์เปิดใช้งานที่นี่…',
     'lic.btn':'✅ เปิดใช้งาน','lic.checking':'กำลังตรวจสอบ…','lic.errEmpty':'กรุณาวางคีย์ก่อน',
     'lic.errBad':'คีย์ไม่ถูกต้อง','lic.errNet':'เชื่อมต่อไม่ได้ ลองใหม่อีกครั้ง',
+    'lic.revoked':'🚫 คีย์นี้ถูกระงับการใช้งานโดยแอดมิน — กรุณาติดต่อแอดมิน',
     'storage.title':'โฟลเดอร์เก็บผลลัพธ์','storage.loading':'กำลังโหลด…','storage.pick':'เลือกโฟลเดอร์…',
     'storage.picking':'กำลังเปิดหน้าต่าง…','storage.auto':'อัตโนมัติ','storage.modeAuto':'อัตโนมัติ','storage.modeCustom':'เลือกเอง',
     'storage.pickErr':'เลือกโฟลเดอร์ไม่สำเร็จ','storage.pickOpenErr':'เปิดหน้าต่างเลือกโฟลเดอร์ไม่ได้',
@@ -470,6 +471,7 @@ const I18N = {
     'lic.step2':'2) Paste the key from the admin, then activate:','lic.ph':'Paste your activation key here…',
     'lic.btn':'✅ Activate','lic.checking':'Checking…','lic.errEmpty':'Please paste a key first',
     'lic.errBad':'Invalid key','lic.errNet':'Connection failed, try again',
+    'lic.revoked':'🚫 This key has been revoked by the admin — please contact the admin',
     'storage.title':'Save location','storage.loading':'Loading…','storage.pick':'Choose folder…',
     'storage.picking':'Opening…','storage.auto':'Auto','storage.modeAuto':'auto','storage.modeCustom':'custom',
     'storage.pickErr':'Could not select folder','storage.pickOpenErr':'Could not open the folder dialog',
@@ -668,7 +670,14 @@ async function checkLicense() {
     document.getElementById('licMachineId').textContent = d.machine_id || '—';
     document.getElementById('machineIdShow').textContent = d.machine_id || '—';
     renderLicense(d);
-    if (d.activated) hideLicenseGate(); else showLicenseGate();
+    if (d.revoked) {
+      showLicenseGate();
+      document.getElementById('licErr').textContent = t('lic.revoked');
+    } else if (d.activated) {
+      hideLicenseGate();
+    } else {
+      showLicenseGate();
+    }
   } catch {}
 }
 function copyMachine(btn){ copyText(document.getElementById('machineIdShow').textContent, btn, 'mc.copied'); }
@@ -704,10 +713,14 @@ dropZone.addEventListener('drop', e => {
   e.preventDefault(); dropZone.classList.remove('drag-over');
   handleFiles([...e.dataTransfer.files].filter(isVideoFile));
 });
-document.getElementById('videoInput').addEventListener('change', e => handleFiles([...e.target.files]));
+document.getElementById('videoInput').addEventListener('change', e => {
+  handleFiles([...e.target.files]);
+  e.target.value = '';   // clear so picking the SAME file again still fires 'change'
+});
 document.getElementById('musicInput').addEventListener('change', e => {
   selectedMusic = e.target.files[0];
   document.getElementById('musicFileName').textContent = selectedMusic ? '🎵 ' + selectedMusic.name : '';
+  e.target.value = '';
 });
 function isVideoFile(f) {
   if (f.type && f.type.startsWith('video/')) return true;

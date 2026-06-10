@@ -103,6 +103,72 @@ def _save_key(key: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Remote kill-switch (revocation)
+#
+# The app is offline-first, so an issued key can't be "recalled".  Instead the
+# admin publishes a small SIGNED list of revoked Machine IDs next to the update
+# files; when online the app fetches it and, if this machine is listed,
+# deactivates and writes a local marker so it stays revoked even offline after.
+# Network/verify failure never changes state (offline use is never broken).
+# ---------------------------------------------------------------------------
+def canonical_revocation(ids: list[str]) -> bytes:
+    """Exact bytes signed/verified for a revocation list (admin & app agree)."""
+    clean = sorted({str(x).strip().upper() for x in ids if str(x).strip()})
+    return "\n".join(clean).encode("utf-8")
+
+
+def _revoked_marker_path() -> str:
+    return os.path.join(os.path.dirname(_license_path()), "revoked.flag")
+
+
+def is_revoked_local() -> bool:
+    return os.path.isfile(_revoked_marker_path())
+
+
+def _set_revoked_local(revoked: bool) -> None:
+    p = _revoked_marker_path()
+    try:
+        if revoked:
+            with open(p, "w", encoding="utf-8") as f:
+                f.write(machine_id())
+        elif os.path.isfile(p):
+            os.remove(p)
+    except OSError:
+        pass
+
+
+def refresh_revocation(timeout: float = 4.0) -> bool:
+    """Best-effort: sync the local revoked marker with the signed online list.
+
+    Returns True if this machine is currently revoked.  Any network/verify error
+    leaves the marker untouched (so offline use is never broken).
+    """
+    import urllib.request
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+    try:
+        from . import updater
+        base = updater.update_base_url()
+    except Exception:  # noqa: BLE001
+        base = ""
+    if not base:
+        return is_revoked_local()
+    try:
+        req = urllib.request.Request(base + "/revoked.json",
+                                     headers={"Cache-Control": "no-cache"})
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            data = json.loads(r.read().decode("utf-8"))
+        ids = [str(x).strip().upper() for x in data.get("ids", [])]
+        sig = base64.b64decode(data["sig"])
+        pub = Ed25519PublicKey.from_public_bytes(base64.b64decode(_PUBLIC_KEY_B64))
+        pub.verify(sig, canonical_revocation(ids))  # tamper check
+    except Exception:  # noqa: BLE001 — offline / 404 / bad data → keep state
+        return is_revoked_local()
+    revoked = machine_id().upper() in ids
+    _set_revoked_local(revoked)
+    return revoked
+
+
+# ---------------------------------------------------------------------------
 # Verification
 # ---------------------------------------------------------------------------
 def verify(key: str) -> dict:
@@ -145,6 +211,8 @@ def verify(key: str) -> dict:
 # ---------------------------------------------------------------------------
 def is_activated() -> bool:
     global _cache
+    if is_revoked_local():        # admin kill-switch wins over a valid key
+        return False
     if _cache and _cache.get("ok"):
         return True
     key = _load_saved_key()
@@ -167,8 +235,9 @@ def activate(key: str) -> dict:
 
 
 def status() -> dict:
+    revoked = is_revoked_local()
     activated = is_activated()
-    out = {"activated": activated, "machine_id": machine_id()}
+    out = {"activated": activated, "machine_id": machine_id(), "revoked": revoked}
     if activated and _cache:
         out["name"] = _cache.get("name", "")
         out["expiry"] = _cache.get("exp", "")

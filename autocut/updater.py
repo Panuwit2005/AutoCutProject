@@ -256,3 +256,28 @@ def _bump_version(init_path: str, version: str) -> bytes:
     if n == 0:
         new = text + f'\n__version__ = "{version}"\n'
     return new.encode("utf-8")
+
+
+# ---------------------------------------------------------------------------
+# Admin side: the kill-switch revocation list (signed, like updates)
+# ---------------------------------------------------------------------------
+def read_revocation_ids(out_dir: str) -> list[str]:
+    """Current revoked Machine IDs from <out_dir>/revoked.json (empty if none)."""
+    try:
+        with open(os.path.join(out_dir, "revoked.json"), encoding="utf-8") as f:
+            return [str(x).strip().upper() for x in json.load(f).get("ids", [])]
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def build_revocation(out_dir: str, ids: list[str], sign) -> str:
+    """Write a SIGNED <out_dir>/revoked.json from *ids*; returns its path."""
+    from . import licensing
+    clean = sorted({str(x).strip().upper() for x in ids if str(x).strip()})
+    sig = sign(licensing.canonical_revocation(clean))
+    manifest = {"ids": clean, "sig": base64.b64encode(sig).decode("ascii")}
+    os.makedirs(out_dir, exist_ok=True)
+    path = os.path.join(out_dir, "revoked.json")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(manifest, f, ensure_ascii=False, indent=2)
+    return path
