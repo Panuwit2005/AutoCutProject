@@ -171,10 +171,12 @@ def pick_folder():
         cmd = [sys.executable, "--pick-folder"]
     else:
         cmd = [sys.executable, "-m", "autocut.folder_picker"]
+    no_window = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
     try:
         res = subprocess.run(cmd, capture_output=True, text=True,
                              encoding="utf-8", errors="replace", timeout=300,
-                             cwd=os.path.dirname(os.path.abspath(__file__)))
+                             cwd=os.path.dirname(os.path.abspath(__file__)),
+                             creationflags=no_window)
     except (subprocess.TimeoutExpired, OSError) as e:
         return jsonify({"ok": False, "error": f"เปิดหน้าต่างเลือกโฟลเดอร์ไม่ได้: {e}"}), 500
     path = (res.stdout or "").strip().splitlines()[-1].strip() if res.stdout.strip() else ""

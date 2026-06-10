@@ -27,6 +27,12 @@ class ToolError(RuntimeError):
     """A required external tool is missing or a command failed."""
 
 
+# On a windowed (no-console) Windows build, every child process would otherwise
+# pop its OWN black console window (ffmpeg runs many times per job).  This flag
+# keeps them hidden.  0 on non-Windows / where the flag doesn't exist.
+_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
+
+
 # ---------------------------------------------------------------------------
 # Discovery
 # ---------------------------------------------------------------------------
@@ -193,6 +199,7 @@ def run(cmd: list[str], *, timeout: int | None = None, check: bool = False,
             errors="replace",
             env=subprocess_env(),
             timeout=timeout,
+            creationflags=_NO_WINDOW,
         )
     except FileNotFoundError as e:
         raise ToolError(f"Executable not found: {cmd[0]} ({e})") from e

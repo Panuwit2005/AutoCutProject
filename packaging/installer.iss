@@ -3,7 +3,7 @@
 ; "click Next to install" Windows setup with Desktop / Start Menu shortcuts.
 
 #define MyAppName "AutoCut Pro"
-#define MyAppVersion "4.0"
+#define MyAppVersion "1.0"
 #define MyAppPublisher "Kapoo"
 #define MyAppExe "AutoCutPro.exe"
 
@@ -25,6 +25,11 @@ PrivilegesRequired=admin
 WizardStyle=modern
 UninstallDisplayName={#MyAppName}
 UninstallDisplayIcon={app}\{#MyAppExe}
+
+; Clear any OTA update overlay so a fresh install always runs the bundled
+; version (otherwise a previously downloaded patch would still load).
+[InstallDelete]
+Type: filesandordirs; Name: "{localappdata}\AutoCutPro\app_update"
 
 [Files]
 Source: "..\dist\AutoCutPro\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
