@@ -41,10 +41,11 @@ import time
 import urllib.request
 import zipfile
 
-# Baked default. The dev can leave this blank and instead set ``update_url`` in
-# config.json (or the AUTOCUT_UPDATE_URL env var) so the location can change
-# without a rebuild.  Must point at the folder that holds update.json + the zip.
-DEFAULT_UPDATE_URL = ""
+# Baked default — the GitHub repo's raw URL for the ``update/`` folder.  The dev
+# can still override per-machine via config.json ``update_url`` or the
+# AUTOCUT_UPDATE_URL env var.  raw.githubusercontent.com serves the latest pushed
+# file, so updating = push the new update.json + zip to the repo's update/ folder.
+DEFAULT_UPDATE_URL = "https://raw.githubusercontent.com/Panuwit2005/AutoCutProject/main/update"
 
 # Files/dirs that make up a code patch (everything that is NOT a heavy asset).
 CODE_INCLUDE = ["index.html", "app.py", "static", "autocut"]

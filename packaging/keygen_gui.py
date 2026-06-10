@@ -39,9 +39,11 @@ def _here() -> str:
 
 
 def _project_root() -> str:
-    # From source: the parent of packaging/. From a frozen exe: best-effort cwd.
+    # The repo root that holds the source + the update/ folder.
+    # From source: parent of packaging/.  Frozen: AutoCutKeygen.exe ships in
+    # <repo>\release\admin\, so the repo is two levels up from the exe folder.
     if getattr(sys, "frozen", False):
-        return os.getcwd()
+        return os.path.dirname(os.path.dirname(_here()))
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
@@ -149,8 +151,8 @@ class PublishTab:
                  bg=BG, fg="#aaa", font=("Segoe UI", 10)).pack(anchor="w", pady=(0, 14))
 
         self.src = self._path_field(box, "โฟลเดอร์ซอร์สโค้ด (โปรเจกต์)", _project_root(), self._pick_src)
-        self.out = self._path_field(box, "โฟลเดอร์ที่จะเก็บไฟล์อัปเดต",
-                                    os.path.join(_project_root(), "release", "update"), self._pick_out)
+        self.out = self._path_field(box, "โฟลเดอร์ที่จะเก็บไฟล์อัปเดต (push ขึ้น GitHub)",
+                                    os.path.join(_project_root(), "update"), self._pick_out)
         self.ver = self._field(box, "เวอร์ชันใหม่ (เช่น 4.1)")
         self.notes = self._field(box, "บันทึกการแก้ไข (ไม่บังคับ)")
 
