@@ -31,19 +31,59 @@ IMPORTANT_KEYWORDS = [
     "perfect", "amazing", "excellent",
 ]
 
-STYLES = ("highlight", "pill", "neon", "kinetic")
+# All selectable caption looks (rendered through HyperFrames online; the libass
+# fallback approximates them offline).  Names mirror the HyperFrames catalog.
+STYLES = (
+    "highlight", "pill", "neon-glow", "neon-accent", "kinetic-slam",
+    "clip-wipe", "gradient-fill", "glitch-rgb", "matrix-decode",
+    "weight-shift", "editorial", "emoji-pop", "pill-karaoke",
+)
+# Back-compat aliases for older saved choices.
+_STYLE_ALIASES = {"neon": "neon-glow", "kinetic": "kinetic-slam"}
+
+
+def _norm_style(style: str) -> str:
+    style = _STYLE_ALIASES.get(style, style)
+    return style if style in STYLES else "highlight"
+
+
+# Curated "hit" Thai social-media fonts (all Google Fonts with Thai + Latin).
+# id → (Google family name, weights to load).
+FONTS = {
+    "Kanit": ("Kanit", "700;800;900"),
+    "Prompt": ("Prompt", "700;800;900"),
+    "Mitr": ("Mitr", "600;700"),
+    "Bai Jamjuree": ("Bai Jamjuree", "700"),
+    "Chakra Petch": ("Chakra Petch", "700"),
+    "Anuphan": ("Anuphan", "700;800"),
+    "Mali": ("Mali", "700"),
+    "Noto Sans Thai": ("Noto Sans Thai", "700;800;900"),
+}
+DEFAULT_FONT = "Kanit"
+
+
+def _norm_font(font: str) -> str:
+    return font if font in FONTS else DEFAULT_FONT
 
 
 # ---------------------------------------------------------------------------
 # Caption timing: map source-time transcript onto the final cut timeline
 # ---------------------------------------------------------------------------
 def build_captions(clips: list[Clip], transcript: Transcript | None, *,
-                   important_only: bool = True, max_chars: int = 32) -> list[Clip]:
-    """Return captions in *final* (post-cut) timeline coordinates.
+                   important_only: bool = False, max_chars: int = 22,
+                   max_words: int = 7) -> list[Clip]:
+    """Return short, accurately-timed captions in *final* (post-cut) coordinates.
 
-    ``clips`` are the selected source ranges, in output order.  As we lay them
-    end to end we accumulate an offset and shift any overlapping transcript
-    segment into the merged timeline.
+    The previous version showed one (truncated, 32-char) caption per *segment*
+    and only for "important" lines — so most speech showed nothing and long
+    sentences lost their tail.  This version works at the **word** level: every
+    spoken word is mapped onto the cut timeline and grouped into small readable
+    chunks that follow the voice, so captions stay in sync and nothing is
+    dropped.  Falls back to segment text (re-chunked, never truncated) when a
+    segment has no word timings.
+
+    ``clips`` are the kept source ranges in output order; we accumulate an offset
+    as we lay them end to end.
     """
     if not transcript or not transcript.segments:
         return []
@@ -52,35 +92,86 @@ def build_captions(clips: list[Clip], transcript: Transcript | None, *,
     offset = 0.0
     for clip in clips:
         for seg in transcript.segments:
-            # Overlap between the transcript segment and this kept clip.
-            s = max(seg.start, clip.start)
-            e = min(seg.end, clip.end)
-            if e - s < 0.3:
+            if min(seg.end, clip.end) - max(seg.start, clip.start) < 0.2:
                 continue
-            text = seg.text.strip()
-            if not text:
+            if important_only and not _is_important(seg.text):
                 continue
-            if important_only and not _is_important(text):
-                continue
-            captions.append(Clip(
-                start=offset + (s - clip.start),
-                end=offset + (e - clip.start),
-                text=_shorten(text, max_chars),
-            ))
+            captions.extend(_segment_to_chunks(seg, clip, offset, max_chars, max_words))
         offset += clip.duration
 
     captions.sort(key=lambda c: c.start)
     return _dedupe(captions)
 
 
+def _segment_to_chunks(seg, clip: Clip, offset: float, max_chars: int,
+                       max_words: int) -> list[Clip]:
+    """Turn one transcript segment into one or more timed caption chunks,
+    clipped to *clip* and shifted onto the final timeline by *offset*."""
+    def to_final(t: float) -> float:
+        return offset + (min(max(t, clip.start), clip.end) - clip.start)
+
+    # Prefer word-level timing when we have it.
+    words = [w for w in (seg.words or [])
+             if w.end > w.start and w.end > clip.start and w.start < clip.end]
+    out: list[Clip] = []
+    if words:
+        cur: list = []
+        cur_text = ""
+        for w in words:
+            cur.append(w)
+            cur_text += w.text
+            gap_break = (len(cur) >= 2 and
+                         w.start - cur[-2].end > 0.6)
+            if (len(cur_text.strip()) >= max_chars or len(cur) >= max_words
+                    or gap_break
+                    or to_final(w.end) - to_final(cur[0].start) >= 2.4):
+                out.append(_mk_chunk(cur, to_final))
+                cur, cur_text = [], ""
+        if cur:
+            out.append(_mk_chunk(cur, to_final))
+        return [c for c in out if c.text and c.duration >= 0.15]
+
+    # No word timings: split the segment text into time-proportional pieces.
+    text = " ".join((seg.text or "").split())
+    if not text:
+        return []
+    s, e = to_final(seg.start), to_final(seg.end)
+    pieces = _split_text(text, max_chars)
+    if len(pieces) <= 1:
+        return [Clip(start=s, end=e, text=text)]
+    span = (e - s) / len(pieces)
+    return [Clip(start=s + i * span, end=s + (i + 1) * span, text=p)
+            for i, p in enumerate(pieces)]
+
+
+def _mk_chunk(words, to_final) -> Clip:
+    text = "".join(w.text for w in words).strip()
+    return Clip(start=to_final(words[0].start), end=to_final(words[-1].end), text=text)
+
+
+def _split_text(text: str, max_chars: int) -> list[str]:
+    """Greedy wrap by spaces (English) or by length (spaceless Thai)."""
+    if len(text) <= max_chars:
+        return [text]
+    out, line = [], ""
+    if " " in text:
+        for word in text.split():
+            if line and len(line) + 1 + len(word) > max_chars:
+                out.append(line)
+                line = word
+            else:
+                line = f"{line} {word}".strip()
+        if line:
+            out.append(line)
+    else:
+        for i in range(0, len(text), max_chars):
+            out.append(text[i:i + max_chars])
+    return out
+
+
 def _is_important(text: str) -> bool:
     low = text.lower()
     return any(kw in low for kw in IMPORTANT_KEYWORDS)
-
-
-def _shorten(text: str, max_chars: int) -> str:
-    text = " ".join(text.split())
-    return text if len(text) <= max_chars else text[: max_chars - 1] + "…"
 
 
 def _dedupe(captions: list[Clip]) -> list[Clip]:
@@ -98,18 +189,30 @@ def _dedupe(captions: list[Clip]) -> list[Clip]:
 # ---------------------------------------------------------------------------
 def burn(video: str, captions: list[Clip], dst: str, *, canvas: tuple[int, int],
          duration: float, style: str = "highlight", fmt: str = "mp4",
+         font: str = DEFAULT_FONT, overlay_out: str | None = None,
          work_dir: str | None = None, log=None) -> str:
-    """Overlay *captions* on *video* → *dst*. Falls back to *video* on failure."""
+    """Overlay *captions* on *video* → *dst*. Falls back to *video* on failure.
+
+    If *overlay_out* is given and HyperFrames produced a transparent overlay,
+    a copy is saved there (a .mov with alpha) so the customer can composite the
+    subtitle themselves in CapCut / Premiere.
+    """
     if not captions:
         return video
-    if style not in STYLES:
-        style = "highlight"
+    style = _norm_style(style)
+    font = _norm_font(font)
 
     work_dir = work_dir or tempfile.mkdtemp(prefix="hf_overlay_")
 
     # Primary: render captions as a HyperFrames composition and composite them.
-    overlay = _render_overlay(captions, canvas, duration, style, work_dir, log)
+    overlay = _render_overlay(captions, canvas, duration, style, work_dir, font, log)
     if overlay:
+        if overlay_out:
+            try:
+                import shutil as _sh
+                _sh.copyfile(overlay, overlay_out)
+            except OSError:
+                pass
         try:
             return _composite(video, overlay, dst, fmt=fmt, log=log)
         except tools.ToolError as e:
@@ -131,7 +234,8 @@ def burn(video: str, captions: list[Clip], dst: str, *, canvas: tuple[int, int],
 # HyperFrames render
 # ---------------------------------------------------------------------------
 def _render_overlay(captions: list[Clip], canvas: tuple[int, int],
-                    duration: float, style: str, work_dir: str, log=None) -> str | None:
+                    duration: float, style: str, work_dir: str,
+                    font: str = DEFAULT_FONT, log=None) -> str | None:
     if not tools.NPX:
         return None
     proj = os.path.join(work_dir, "hf_proj")
@@ -143,7 +247,7 @@ def _render_overlay(captions: list[Clip], canvas: tuple[int, int],
     with open(os.path.join(proj, "hyperframes.json"), "w", encoding="utf-8") as f:
         json.dump({"paths": {"blocks": "compositions", "assets": "assets"}}, f)
     with open(os.path.join(proj, "index.html"), "w", encoding="utf-8") as f:
-        f.write(_composition_html(captions, w, h, duration, style))
+        f.write(_composition_html(captions, w, h, duration, style, font))
 
     # HyperFrames emits a *transparent* overlay as MOV (ProRes 4444 w/ alpha).
     # WebM came out opaque (yuv420p) in testing, so MOV is the reliable choice.
@@ -210,7 +314,10 @@ def _composite(video: str, overlay: str, dst: str, *, fmt: str, log=None) -> str
 # Composition HTML generation
 # ---------------------------------------------------------------------------
 def _composition_html(captions: list[Clip], w: int, h: int, duration: float,
-                      style: str) -> str:
+                      style: str, font: str = DEFAULT_FONT) -> str:
+    family, weights = FONTS[_norm_font(font)]
+    font_url = ("https://fonts.googleapis.com/css2?family="
+                + family.replace(" ", "+") + ":wght@" + weights + "&display=swap")
     caption_divs = []
     tweens = []
     for i, c in enumerate(captions):
@@ -229,7 +336,7 @@ def _composition_html(captions: list[Clip], w: int, h: int, duration: float,
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width={w}, height={h}" />
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@700;800;900&display=swap" rel="stylesheet">
+<link href="{font_url}" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
 <style>
   * {{ margin:0; padding:0; box-sizing:border-box; }}
@@ -238,7 +345,7 @@ def _composition_html(captions: list[Clip], w: int, h: int, duration: float,
   .caption {{
     position:absolute; left:6%; right:6%; bottom:16%;
     display:flex; justify-content:center; text-align:center;
-    font-family:'Noto Sans Thai','Sarabun',sans-serif;
+    font-family:'{family}','Noto Sans Thai',sans-serif;
   }}
   .cap-inner {{ display:inline-block; line-height:1.25; padding:10px 22px; }}
 {_style_css(w)}
@@ -267,38 +374,91 @@ def _font_px(w: int) -> int:
 
 def _style_css(w: int) -> str:
     fs = _font_px(w)
+    big = round(fs * 1.12)
     return f"""
   .highlight .cap-inner {{
     font-size:{fs}px; font-weight:800; color:#111;
-    background:#FFD600; border-radius:10px;
-    box-shadow:0 6px 18px rgba(0,0,0,.45);
+    background:#FFD600; border-radius:10px; box-shadow:0 6px 18px rgba(0,0,0,.45);
   }}
   .pill .cap-inner {{
     font-size:{fs}px; font-weight:700; color:#fff;
     background:#1a1a2e; border:3px solid #00E5A0; border-radius:999px;
     box-shadow:0 8px 22px rgba(0,0,0,.5);
   }}
-  .neon .cap-inner {{
+  .neon-glow .cap-inner {{
     font-size:{fs}px; font-weight:800; color:#fff;
     text-shadow:0 0 8px #00E5A0,0 0 18px #00E5A0,0 0 36px #00E5A0;
   }}
-  .kinetic .cap-inner {{
-    font-size:{round(fs * 1.1)}px; font-weight:900; color:#FFD600;
-    -webkit-text-stroke:2px #FF6B35;
-    text-shadow:0 4px 10px rgba(0,0,0,.6);
+  .neon-accent .cap-inner {{
+    font-size:{fs}px; font-weight:800; color:#fff;
+    border-bottom:6px solid #00E5FF; padding-bottom:4px;
+    text-shadow:0 0 10px rgba(0,229,255,.6),0 3px 8px rgba(0,0,0,.6);
+  }}
+  .kinetic-slam .cap-inner {{
+    font-size:{big}px; font-weight:900; color:#FFD600;
+    -webkit-text-stroke:2px #FF6B35; text-shadow:0 4px 10px rgba(0,0,0,.6);
+  }}
+  .clip-wipe .cap-inner {{
+    font-size:{fs}px; font-weight:900; color:#fff;
+    text-shadow:0 3px 10px rgba(0,0,0,.7);
+  }}
+  .gradient-fill .cap-inner {{
+    font-size:{big}px; font-weight:900;
+    background:linear-gradient(90deg,#FFD600,#FF6B35,#FF2D95,#FFD600);
+    background-size:300% 100%;
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+    -webkit-text-fill-color:transparent;
+    filter:drop-shadow(0 4px 8px rgba(0,0,0,.6));
+  }}
+  .glitch-rgb .cap-inner {{
+    font-size:{fs}px; font-weight:900; color:#fff;
+    text-shadow:3px 0 #ff003c,-3px 0 #00e5ff,0 3px 8px rgba(0,0,0,.5);
+  }}
+  .matrix-decode .cap-inner {{
+    font-size:{fs}px; font-weight:800; color:#00FF6A;
+    font-family:'Consolas','Courier New',monospace;
+    text-shadow:0 0 10px rgba(0,255,106,.7);
+  }}
+  .weight-shift .cap-inner {{
+    font-size:{fs}px; font-weight:900; color:#fff; letter-spacing:1px;
+    text-shadow:0 3px 8px rgba(0,0,0,.6);
+  }}
+  .editorial .cap-inner {{
+    font-size:{fs}px; font-weight:700; color:#fff; letter-spacing:2px;
+    text-transform:uppercase; text-shadow:0 3px 10px rgba(0,0,0,.6);
+  }}
+  .emoji-pop .cap-inner {{
+    font-size:{big}px; font-weight:900; color:#fff;
+    text-shadow:0 0 4px #000,0 6px 14px rgba(0,0,0,.6);
+  }}
+  .pill-karaoke .cap-inner {{
+    font-size:{fs}px; font-weight:800; color:#111;
+    background:#FFD600; border-radius:999px; padding:10px 30px;
+    box-shadow:0 8px 22px rgba(0,0,0,.45);
   }}"""
 
 
 def _tween_for(style: str, cid: str, start: float) -> str:
     sel = f'"#{cid}"'
-    if style == "kinetic":
-        return f'tl.from({sel}, {{opacity:0, y:60, scale:0.6, duration:0.28, ease:"back.out(2)"}}, {start:.3f});'
-    if style == "pill":
-        return f'tl.from({sel}, {{opacity:0, scale:0.8, duration:0.25, ease:"power2.out"}}, {start:.3f});'
-    if style == "neon":
-        return f'tl.from({sel}, {{opacity:0, duration:0.3, ease:"power1.out"}}, {start:.3f});'
+    s = f"{start:.3f}"
+    tweens = {
+        "kinetic-slam": f'tl.from({sel}, {{opacity:0, y:70, scale:0.55, duration:0.26, ease:"back.out(2.2)"}}, {s});',
+        "pill": f'tl.from({sel}, {{opacity:0, scale:0.8, duration:0.25, ease:"power2.out"}}, {s});',
+        "pill-karaoke": f'tl.from({sel}, {{opacity:0, scale:0.85, duration:0.22, ease:"power2.out"}}, {s});',
+        "neon-glow": f'tl.from({sel}, {{opacity:0, duration:0.3, ease:"power1.out"}}, {s});',
+        "neon-accent": f'tl.from({sel}, {{opacity:0, y:18, duration:0.28, ease:"power2.out"}}, {s});',
+        "clip-wipe": f'tl.from({sel}, {{clipPath:"inset(0 100% 0 0)", duration:0.42, ease:"power2.out"}}, {s});',
+        "gradient-fill": (f'tl.from({sel}, {{opacity:0, y:20, duration:0.3, ease:"power2.out"}}, {s});'
+                          f'tl.to({sel}, {{backgroundPosition:"-100% 0", duration:1.2, ease:"none"}}, {s});'),
+        "glitch-rgb": f'tl.from({sel}, {{opacity:0, x:-18, duration:0.18, ease:"steps(3)"}}, {s});',
+        "matrix-decode": f'tl.from({sel}, {{opacity:0, filter:"blur(6px)", duration:0.3, ease:"power1.out"}}, {s});',
+        "weight-shift": f'tl.from({sel}, {{opacity:0, letterSpacing:"14px", duration:0.32, ease:"power2.out"}}, {s});',
+        "editorial": f'tl.from({sel}, {{opacity:0, letterSpacing:"20px", duration:0.4, ease:"power2.out"}}, {s});',
+        "emoji-pop": f'tl.from({sel}, {{opacity:0, scale:0.4, duration:0.3, ease:"back.out(3)"}}, {s});',
+    }
     # highlight (default): sweep up
-    return f'tl.from({sel}, {{opacity:0, y:24, duration:0.25, ease:"power2.out"}}, {start:.3f});'
+    return tweens.get(style,
+                      f'tl.from({sel}, {{opacity:0, y:24, duration:0.25, ease:"power2.out"}}, {s});')
 
 
 # ---------------------------------------------------------------------------
@@ -308,11 +468,19 @@ import glob as _glob  # noqa: E402
 
 # ASS colours are &HAABBGGRR (alpha 00 = opaque). Per-style look:
 _ASS_STYLE = {
-    #            primary(text)     back(box)        outline          border  out  shad  bold
-    "highlight": ("&H00111111", "&H0000D6FF", "&H00000000", 3, 6,  0, -1),
-    "pill":      ("&H00FFFFFF", "&H002E1A1A", "&H00A0E500", 3, 8,  0, -1),
-    "neon":      ("&H00FFFFFF", "&H00000000", "&H00A0E500", 1, 3,  4,  0),
-    "kinetic":   ("&H0000D6FF", "&H00000000", "&H00356BFF", 1, 4,  3, -1),
+    #               primary(text)   back(box)      outline        border out shad bold
+    "highlight":    ("&H00111111", "&H0000D6FF", "&H00000000", 3, 6, 0, -1),
+    "pill":         ("&H00FFFFFF", "&H002E1A1A", "&H00A0E500", 3, 8, 0, -1),
+    "pill-karaoke": ("&H00111111", "&H0000D6FF", "&H00000000", 3, 8, 0, -1),
+    "neon-glow":    ("&H00FFFFFF", "&H00000000", "&H00A0E500", 1, 3, 4,  0),
+    "neon-accent":  ("&H00FFFFFF", "&H00000000", "&H00FFE500", 1, 3, 3,  0),
+    "kinetic-slam": ("&H0000D6FF", "&H00000000", "&H00356BFF", 1, 4, 3, -1),
+    "gradient-fill":("&H0000D6FF", "&H00000000", "&H00356BFF", 1, 4, 3, -1),
+    "glitch-rgb":   ("&H00FFFFFF", "&H00000000", "&H003C00FF", 1, 3, 3,  0),
+    "matrix-decode":("&H006AFF00", "&H00000000", "&H00000000", 1, 2, 4,  0),
+    "weight-shift": ("&H00FFFFFF", "&H00000000", "&H00000000", 1, 4, 3, -1),
+    "editorial":    ("&H00FFFFFF", "&H00000000", "&H00000000", 1, 3, 3,  0),
+    "emoji-pop":    ("&H00FFFFFF", "&H00000000", "&H00000000", 1, 5, 4, -1),
 }
 
 

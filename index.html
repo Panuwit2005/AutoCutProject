@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AutoCut — ตัดคลิปอัตโนมัติ</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<!-- "Hit" social caption fonts (for the subtitle font picker preview) -->
+<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@700;800&family=Prompt:wght@700&family=Mitr:wght@600&family=Bai+Jamjuree:wght@700&family=Chakra+Petch:wght@700&family=Anuphan:wght@700&family=Mali:wght@700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/style.css">
 <script>
   // Apply saved theme before paint to avoid a flash.
@@ -34,6 +36,38 @@
   .lic-copy { padding:10px 16px; border-radius:var(--radius-sm); border:1px solid var(--accent);
     background:transparent; color:var(--accent); cursor:pointer; font-size:14px; white-space:nowrap; }
   .lic-err { color:var(--danger); font-size:14px; margin-top:12px; min-height:18px; }
+
+  /* ---- Caption style picker + live preview ---- */
+  .style-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr));
+    gap:10px; }
+  .style-grid .style-btn { display:flex; align-items:center; justify-content:center;
+    text-align:center; padding:14px 8px; font-size:15px; min-height:52px; }
+  .style-preview { display:flex; align-items:center; justify-content:center;
+    height:130px; margin-bottom:14px; border-radius:var(--radius-sm);
+    background:radial-gradient(circle at 50% 40%, #23232e, #0c0c12);
+    border:1px solid var(--border); overflow:hidden; }
+  .cap-preview { display:inline-block; line-height:1.2; padding:10px 22px; font-size:30px;
+    font-family:'Noto Sans Thai','Sarabun',sans-serif; animation:capIn .5s ease-out; }
+  @keyframes capIn { from{opacity:0; transform:translateY(18px);} to{opacity:1; transform:none;} }
+  @keyframes capPop { 0%{opacity:0; transform:translateY(40px) scale(.5);} 70%{transform:translateY(0) scale(1.08);} 100%{opacity:1; transform:scale(1);} }
+  @keyframes glowPulse { 0%,100%{filter:brightness(1);} 50%{filter:brightness(1.5);} }
+  @keyframes gradShift { to{background-position:-300% 0;} }
+  @keyframes wipeIn { from{clip-path:inset(0 100% 0 0);} to{clip-path:inset(0 0 0 0);} }
+  @keyframes glitchX { 0%,100%{transform:translateX(0);} 25%{transform:translateX(-3px);} 75%{transform:translateX(3px);} }
+  @keyframes flickerIn { 0%{opacity:0; filter:blur(6px);} 100%{opacity:1; filter:blur(0);} }
+  .cap-preview.highlight { font-weight:800; color:#111; background:#FFD600; border-radius:10px; box-shadow:0 6px 18px rgba(0,0,0,.45); }
+  .cap-preview.pill { font-weight:700; color:#fff; background:#1a1a2e; border:3px solid #00E5A0; border-radius:999px; }
+  .cap-preview.neon-glow { font-weight:800; color:#fff; text-shadow:0 0 8px #00E5A0,0 0 18px #00E5A0,0 0 36px #00E5A0; animation:capIn .5s ease-out, glowPulse 1.6s ease-in-out infinite; }
+  .cap-preview.neon-accent { font-weight:800; color:#fff; border-bottom:5px solid #00E5FF; padding-bottom:3px; text-shadow:0 0 10px rgba(0,229,255,.6); }
+  .cap-preview.kinetic-slam { font-weight:900; color:#FFD600; -webkit-text-stroke:2px #FF6B35; animation:capPop .5s ease-out; }
+  .cap-preview.clip-wipe { font-weight:900; color:#fff; text-shadow:0 3px 10px rgba(0,0,0,.7); animation:wipeIn .5s ease-out; }
+  .cap-preview.gradient-fill { font-weight:900; background:linear-gradient(90deg,#FFD600,#FF6B35,#FF2D95,#FFD600); background-size:300% 100%; -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent; animation:gradShift 3s linear infinite; }
+  .cap-preview.glitch-rgb { font-weight:900; color:#fff; text-shadow:3px 0 #ff003c,-3px 0 #00e5ff; animation:glitchX .25s steps(2) infinite; }
+  .cap-preview.matrix-decode { font-weight:800; color:#00FF6A; font-family:'Consolas',monospace; text-shadow:0 0 10px rgba(0,255,106,.7); animation:flickerIn .5s ease-out; }
+  .cap-preview.weight-shift { font-weight:900; color:#fff; letter-spacing:1px; }
+  .cap-preview.editorial { font-weight:700; color:#fff; letter-spacing:3px; text-transform:uppercase; }
+  .cap-preview.emoji-pop { font-weight:900; color:#fff; text-shadow:0 0 4px #000,0 6px 14px rgba(0,0,0,.6); animation:capPop .5s ease-out; }
+  .cap-preview.pill-karaoke { font-weight:800; color:#111; background:#FFD600; border-radius:999px; padding:10px 30px; }
 </style>
 </head>
 <body>
@@ -119,6 +153,16 @@
         <div class="upload-btn" data-i18n="music.btn" onclick="document.getElementById('musicInput').click()">เลือกไฟล์เพลง</div>
       </div>
       <div id="musicFileName" style="margin-top:12px;font-size:15px;color:var(--accent);"></div>
+      <div id="musicVolumeRow" style="display:none;margin-top:16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <span style="font-size:15px;color:var(--text);" data-i18n="music.vol">🔊 ระดับเสียงเพลง</span>
+          <span id="musicVolumeVal" style="font-size:16px;font-weight:700;color:var(--accent);">20%</span>
+        </div>
+        <input type="range" id="musicVolumeSlider" min="1" max="100" value="20" step="1"
+               style="width:100%;"
+               oninput="document.getElementById('musicVolumeVal').textContent=this.value+'%';">
+        <div class="field-hint" style="margin-top:4px;" data-i18n="music.volHint">ยิ่งมาก เพลงยิ่งดัง — แนะนำ 15-30% เพื่อให้ได้ยินเสียงพูดชัด</div>
+      </div>
     </div>
 
     <!-- Settings -->
@@ -203,17 +247,21 @@
           <span class="toggle-label" id="subtitleToggleLabel"></span>
         </div>
         <div id="subtitleOptions" style="display:none;">
-          <div class="field-hint" style="margin-bottom:12px;" data-i18n="sub.styleHint">เลือกสไตล์คำบรรยาย:</div>
-          <div class="btn-row">
-            <button class="style-btn active" id="style_highlight" onclick="setSubtitleStyle('highlight')">
-              <span data-i18n="style.highlight">✨ Highlight</span><small data-i18n="style.highlightSub">ไฮไลต์สีเหลือง</small></button>
-            <button class="style-btn" id="style_pill" onclick="setSubtitleStyle('pill')">
-              <span data-i18n="style.pill">💊 Pill</span><small data-i18n="style.pillSub">กล่องโค้ง อ่านง่าย</small></button>
-            <button class="style-btn" id="style_neon" onclick="setSubtitleStyle('neon')">
-              <span data-i18n="style.neon">🌟 Neon</span><small data-i18n="style.neonSub">เรืองแสง</small></button>
-            <button class="style-btn" id="style_kinetic" onclick="setSubtitleStyle('kinetic')">
-              <span data-i18n="style.kinetic">⚡ Kinetic</span><small data-i18n="style.kineticSub">Pop ขึ้นมา</small></button>
+          <div class="field-hint" style="margin-bottom:12px;" data-i18n="sub.styleHint">เลือกสไตล์คำบรรยาย (เอาเมาส์ชี้เพื่อดูตัวอย่าง):</div>
+          <!-- Live animated preview of the hovered/selected style -->
+          <div class="style-preview" id="stylePreview">
+            <span class="cap-preview highlight" id="stylePreviewText">ตัวอย่าง Subtitle</span>
           </div>
+          <div class="style-grid" id="styleGrid"></div>
+
+          <div class="field-hint" style="margin:18px 0 8px;" data-i18n="sub.fontHint">เลือกฟอนต์ (ฮิตในโซเชียล):</div>
+          <div class="style-grid" id="fontGrid"></div>
+
+          <label style="display:flex;align-items:center;gap:12px;cursor:pointer;margin-top:18px;font-size:15px;color:var(--text);">
+            <input type="checkbox" id="subOverlayToggle" style="width:20px;height:20px;"
+                   onchange="subOverlayExport=this.checked;">
+            <span data-i18n="sub.overlay">📑 แยกไฟล์ซับไตเติล (overlay โปร่งใส) ไว้ตัดต่อเองในโปรแกรมอื่น</span>
+          </label>
         </div>
       </div>
 
@@ -275,15 +323,8 @@
         </div>
         <div class="field-hint" data-i18n="q.fpsNote">* 60fps ลื่นจริงเฉพาะวิดีโอต้นฉบับที่ถ่ายมา 60fps</div>
       </div>
-      <div class="opt-block">
-        <label class="opt-title" data-i18n="q.quality">🗜 คุณภาพไฟล์</label>
-        <div class="btn-row">
-          <button class="style-btn active" id="q_high" onclick="setQuality('high')"><span data-i18n="q.qHigh">สูง</span><small data-i18n="q.qHighSub">คมชัด ไฟล์ใหญ่</small></button>
-          <button class="style-btn" id="q_medium" onclick="setQuality('medium')"><span data-i18n="q.qMed">กลาง</span><small data-i18n="q.qMedSub">สมดุล</small></button>
-          <button class="style-btn" id="q_saver" onclick="setQuality('saver')"><span data-i18n="q.qSaver">ประหยัด</span><small data-i18n="q.qSaverSub">ไฟล์เล็ก</small></button>
-        </div>
-      </div>
-      <div class="tip-box" data-i18n-html="q.hint"><span>💡</span> "ตามต้นฉบับ" = คงขนาด/สัดส่วนเดิม (ปลอดภัยสุด) · เปลี่ยนสัดส่วนจะเติมขอบดำ ไม่ตัดภาพทิ้ง</div>
+      <!-- File quality is fixed to "High (sharp, large)" — chosen automatically. -->
+      <div class="tip-box" data-i18n-html="q.hint"><span>💡</span> "ตามต้นฉบับ" = คงขนาด/สัดส่วนเดิม (ปลอดภัยสุด) · เปลี่ยนสัดส่วนจะเติมขอบดำ ไม่ตัดภาพทิ้ง · คุณภาพไฟล์ตั้งเป็น <strong>สูง (คมชัด ไฟล์ใหญ่)</strong> ให้อัตโนมัติ</div>
     </div>
 
     <!-- Audio extract -->
@@ -298,8 +339,7 @@
       </div>
     </div>
 
-    <button class="process-btn" id="processBtn" onclick="startProcess(0)" disabled data-i18n="btn.process">✂️ ตัดคลิปอัตโนมัติ</button>
-    <button class="process-btn secondary" id="shuffleBtn" onclick="startProcess('shuffle')" disabled data-i18n="btn.shuffle">🎲 สุ่มรูปแบบใหม่ (ฟุตเดิม ได้คลิปแบบใหม่)</button>
+    <button class="process-btn" id="processBtn" onclick="startProcess()" disabled data-i18n="btn.process">✂️ ตัดคลิปอัตโนมัติ</button>
     <div class="error-box" id="errorBox"></div>
   </div>
 
@@ -413,6 +453,7 @@ const I18N = {
     'upload.title':'วางวิดีโอที่นี่','upload.sub':'รองรับทุกนามสกุล/ทุก codec — อัปโหลดได้หลายไฟล์พร้อมกัน','upload.btn':'เลือกไฟล์วิดีโอ',
     'music.label':'เพลงประกอบ (ไม่บังคับ)','music.title':'เพิ่มเพลงประกอบ',
     'music.sub':'MP3, WAV — เสียงเพลงจะลดลงอัตโนมัติให้ฟังเสียงพูดชัด','music.btn':'เลือกไฟล์เพลง',
+    'music.vol':'🔊 ระดับเสียงเพลง','music.volHint':'ยิ่งมาก เพลงยิ่งดัง — แนะนำ 15-30% เพื่อให้ได้ยินเสียงพูดชัด',
     'step2.label':'ขั้นตอนที่ 2 — ตั้งค่า',
     'proj.label':'📛 ตั้งชื่อคลิป (ไม่บังคับ)','proj.ph':'เช่น คลิปของฉัน — เว้นว่างได้ ระบบจะตั้งชื่อให้เอง',
     'proj.hint':'ใช้เป็นชื่อโฟลเดอร์และชื่อไฟล์ — ถ้าเว้นว่างจะใช้ชื่อ <strong>Project</strong> ตามด้วยวันที่/เวลา',
@@ -429,7 +470,9 @@ const I18N = {
     'da.gentle':'🍃 เบา','da.gentleSub':'ตัดเฉพาะช่วงเงียบยาว','da.medium':'⚖️ ปานกลาง','da.mediumSub':'สมดุล แนะนำ',
     'da.strong':'🔥 เข้ม','da.strongSub':'กระชับสุด',
     'sub.label':'📝 Subtitle อัตโนมัติ','sub.on':'✅ เปิด — ขึ้นคำบรรยายให้อัตโนมัติ','sub.off':'ปิด — ไม่ใส่ subtitle',
-    'sub.styleHint':'เลือกสไตล์คำบรรยาย:',
+    'sub.styleHint':'เลือกสไตล์คำบรรยาย (เอาเมาส์ชี้เพื่อดูตัวอย่าง):',
+    'sub.fontHint':'เลือกฟอนต์ (ฮิตในโซเชียล):',
+    'sub.overlay':'📑 แยกไฟล์ซับไตเติล (overlay โปร่งใส) ไว้ตัดต่อเองในโปรแกรมอื่น',
     'style.highlight':'✨ Highlight','style.highlightSub':'ไฮไลต์สีเหลือง','style.pill':'💊 Pill','style.pillSub':'กล่องโค้ง อ่านง่าย',
     'style.neon':'🌟 Neon','style.neonSub':'เรืองแสง','style.kinetic':'⚡ Kinetic','style.kineticSub':'Pop ขึ้นมา',
     'lj.label':'🎞 เปลี่ยนฉากแบบมืออาชีพ (L/J cut)','lj.on':'✅ เปิด — เสียงคาบเกี่ยวรอยต่อ ฉากเปลี่ยนลื่นไหล',
@@ -479,6 +522,7 @@ const I18N = {
     'upload.title':'Drop your videos here','upload.sub':'Any format / codec — upload multiple files at once','upload.btn':'Choose video files',
     'music.label':'Background music (optional)','music.title':'Add background music',
     'music.sub':'MP3, WAV — music is auto-ducked so speech stays clear','music.btn':'Choose music file',
+    'music.vol':'🔊 Music volume','music.volHint':'Higher = louder music — 15-30% recommended so speech stays clear',
     'step2.label':'Step 2 — Settings',
     'proj.label':'📛 Name your clips (optional)','proj.ph':'e.g. My clip — leave blank to auto-name',
     'proj.hint':'Used for the folder and file names — if blank, uses <strong>Project</strong> + date/time',
@@ -493,7 +537,9 @@ const I18N = {
     'da.label':'🤫 Trim silence (dead air)','da.on':'✅ On — cut out silent gaps for a tighter clip',
     'da.off':'Off — keep everything, including silence','da.hint':'Trim level:',
     'da.gentle':'🍃 Gentle','da.gentleSub':'Only long silences','da.medium':'⚖️ Medium','da.mediumSub':'Balanced, recommended',
-    'da.strong':'🔥 Strong','da.strongSub':'Tightest','sub.styleHint':'Choose a caption style:',
+    'da.strong':'🔥 Strong','da.strongSub':'Tightest','sub.styleHint':'Choose a caption style (hover to preview):',
+    'sub.fontHint':'Choose a font (social favourites):',
+    'sub.overlay':'📑 Export a separate transparent subtitle overlay for editing elsewhere',
     'sub.label':'📝 Auto subtitles','sub.on':'✅ On — add captions automatically','sub.off':'Off — no subtitles',
     'style.highlight':'✨ Highlight','style.highlightSub':'Yellow highlight','style.pill':'💊 Pill','style.pillSub':'Rounded, easy to read',
     'style.neon':'🌟 Neon','style.neonSub':'Glowing','style.kinetic':'⚡ Kinetic','style.kineticSub':'Pops up',
@@ -600,6 +646,8 @@ let selectedMusic  = null;
 let outputMode     = 'merged';
 let selectedFormat = 'mp4';
 let subtitleStyle  = 'highlight';
+let subtitleFont   = 'Kanit';
+let subOverlayExport = false;
 let ljCutMode      = 'l';
 let deadAirAggr    = 'medium';
 let subtitleOn = false, ljCutOn = false, deadAirOn = true, audioExtractOn = false;
@@ -720,6 +768,7 @@ document.getElementById('videoInput').addEventListener('change', e => {
 document.getElementById('musicInput').addEventListener('change', e => {
   selectedMusic = e.target.files[0];
   document.getElementById('musicFileName').textContent = selectedMusic ? '🎵 ' + selectedMusic.name : '';
+  document.getElementById('musicVolumeRow').style.display = selectedMusic ? 'block' : 'none';
   e.target.value = '';
 });
 function isVideoFile(f) {
@@ -737,7 +786,6 @@ function renderFileList() {
     </div>`).join('');
   const has = selectedVideos.length > 0;
   document.getElementById('processBtn').disabled = !has;
-  document.getElementById('shuffleBtn').disabled = !has;
 }
 function removeFile(i) { selectedVideos.splice(i,1); renderFileList(); }
 
@@ -748,11 +796,63 @@ function onSubtitleToggle() {
   subtitleOn = document.getElementById('subtitleToggle').checked;
   document.getElementById('subtitleToggleLabel').textContent = subtitleOn ? t('sub.on') : t('sub.off');
   document.getElementById('subtitleOptions').style.display = subtitleOn ? 'block' : 'none';
+  if (subtitleOn) { buildStyleGrid(); buildFontGrid(); setSubtitleFont(subtitleFont); }
+}
+const STYLE_DEFS = [
+  ['highlight','✨ ไฮไลต์เหลือง'], ['pill','💊 กล่องโค้ง'],
+  ['neon-glow','🌟 นีออนเรืองแสง'], ['neon-accent','🔷 นีออนขีดเส้น'],
+  ['kinetic-slam','⚡ กระแทกเด้ง'], ['clip-wipe','🪄 กวาดเปิด'],
+  ['gradient-fill','🌈 ไล่สี'], ['glitch-rgb','📺 กลิตช์'],
+  ['matrix-decode','🟩 แมทริกซ์'], ['weight-shift','🅱️ น้ำหนักอักษร'],
+  ['editorial','📰 มินิมอล'], ['emoji-pop','🎉 เด้งใหญ่'],
+  ['pill-karaoke','🎤 คาราโอเกะ'],
+];
+function buildStyleGrid() {
+  const grid = document.getElementById('styleGrid');
+  if (!grid || grid.dataset.built) return;
+  grid.dataset.built = '1';
+  grid.innerHTML = STYLE_DEFS.map(([id, label]) =>
+    `<button class="style-btn${id === subtitleStyle ? ' active' : ''}" id="style_${id}"
+       onclick="setSubtitleStyle('${id}')"
+       onmouseenter="showStylePreview('${id}')" onmouseleave="showStylePreview(subtitleStyle)">
+       <span>${label}</span></button>`).join('');
+  showStylePreview(subtitleStyle);
+}
+function showStylePreview(id) {
+  const el = document.getElementById('stylePreviewText');
+  if (!el) return;
+  el.className = 'cap-preview ' + id;
+  // restart the CSS entrance animation
+  el.style.animation = 'none'; void el.offsetWidth; el.style.animation = '';
 }
 function setSubtitleStyle(s) {
   subtitleStyle = s;
-  ['highlight','pill','neon','kinetic'].forEach(x =>
-    document.getElementById('style_'+x).className = 'style-btn' + (x === s ? ' active' : ''));
+  STYLE_DEFS.forEach(([x]) => {
+    const b = document.getElementById('style_' + x);
+    if (b) b.className = 'style-btn' + (x === s ? ' active' : '');
+  });
+  showStylePreview(s);
+}
+// Curated "hit" social fonts (Thai + Latin Google Fonts).
+const FONT_DEFS = ['Kanit','Prompt','Mitr','Bai Jamjuree','Chakra Petch','Anuphan','Mali','Noto Sans Thai'];
+function buildFontGrid() {
+  const grid = document.getElementById('fontGrid');
+  if (!grid || grid.dataset.built) return;
+  grid.dataset.built = '1';
+  grid.innerHTML = FONT_DEFS.map(f =>
+    `<button class="style-btn${f === subtitleFont ? ' active' : ''}" id="font_${f.replace(/ /g,'_')}"
+       style="font-family:'${f}',sans-serif;font-weight:700;font-size:18px;"
+       onclick="setSubtitleFont('${f}')">${f}</button>`).join('');
+}
+function setSubtitleFont(f) {
+  subtitleFont = f;
+  FONT_DEFS.forEach(x => {
+    const b = document.getElementById('font_' + x.replace(/ /g,'_'));
+    if (b) b.className = 'style-btn' + (x === f ? ' active' : '');
+  });
+  // reflect the chosen font in the live style preview too
+  const p = document.getElementById('stylePreviewText');
+  if (p) p.style.fontFamily = `'${f}',sans-serif`;
 }
 function onLjToggle() {
   ljCutOn = document.getElementById('ljToggle').checked;
@@ -815,9 +915,9 @@ function updateSteps(pct) {
 // =============================================
 //  Main process — start job + poll
 // =============================================
-async function startProcess(mode) {
+async function startProcess() {
   if (!selectedVideos.length) return;
-  const variation = mode === 'shuffle' ? (Date.now() % 1000000) + 1 : 0;
+  const variation = 0;  // deterministic: same footage → same best cut
   document.getElementById('errorBox').className = 'error-box';
   document.getElementById('uploadSection').style.display = 'none';
   document.getElementById('progressSection').className = 'progress-section show';
@@ -830,11 +930,14 @@ async function startProcess(mode) {
   const formData = new FormData();
   selectedVideos.forEach(v => formData.append('videos', v));
   if (selectedMusic) formData.append('music', selectedMusic);
+  formData.append('music_volume', document.getElementById('musicVolumeSlider').value);
   formData.append('max_duration',   document.getElementById('durationSlider').value);
   formData.append('output_mode',    outputMode);
   formData.append('output_format',  selectedFormat);
   formData.append('subtitle_on',    subtitleOn ? 'true' : 'false');
   formData.append('subtitle_style', subtitleStyle);
+  formData.append('subtitle_font', subtitleFont);
+  formData.append('subtitle_overlay_export', subOverlayExport ? 'true' : 'false');
   formData.append('lj_cut_on',      ljCutOn ? 'true' : 'false');
   formData.append('lj_cut_mode',    ljCutMode);
   formData.append('lj_overlap',     document.getElementById('ljOverlapSlider').value);
@@ -927,13 +1030,12 @@ function resetAll() {
   currentJob = null; resultDir = null;
   selectedVideos = []; selectedMusic = null;
   setFormat('mp4'); setMode('merged');
-  setAspect('auto'); setResolution('auto'); setFps('30'); setQuality('high');
+  setAspect('auto'); setResolution('auto'); setFps('30'); selectedQuality = 'high';
   document.getElementById('fileList').innerHTML = '';
   document.getElementById('musicFileName').textContent = '';
   document.getElementById('projectNameInput').value = '';
   document.getElementById('durationSlider').value = 60; updateDuration(60);
   document.getElementById('processBtn').disabled = true;
-  document.getElementById('shuffleBtn').disabled = true;
   document.getElementById('resultSection').className = 'result-section';
   document.getElementById('uploadSection').style.display = 'block';
   document.getElementById('countdownTimer').classList.remove('done');

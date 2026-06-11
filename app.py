@@ -75,6 +75,7 @@ class Job:
         self.logs: list[str] = []
         self.error: str | None = None
         self.output_dir: str | None = None     # folder where deliverables were saved
+        self.overlays: list[str] = []          # transparent caption overlays to export
         self.result_name: str | None = None     # that folder's display name
         self.created = datetime.now(timezone.utc)
         self.started_at: float | None = None   # monotonic when work began (count-up timer)
@@ -307,6 +308,10 @@ def process_video():
         "output_format": _valid_format(request.form.get("output_format", "mp4")),
         "subtitle_on": request.form.get("subtitle_on", "false").lower() == "true",
         "subtitle_style": request.form.get("subtitle_style", "highlight"),
+        "subtitle_font": request.form.get("subtitle_font", "Kanit"),
+        # Also save the transparent caption overlay (.mov) so the customer can
+        # composite it themselves in another editor.
+        "subtitle_overlay_export": request.form.get("subtitle_overlay_export", "false").lower() == "true",
         "sfx_on": request.form.get("sfx_on", "false").lower() == "true",
         "sfx_type": request.form.get("sfx_type", "pop"),
         "lj_cut_on": request.form.get("lj_cut_on", "false").lower() == "true",
@@ -315,6 +320,8 @@ def process_video():
         "dead_air_on": request.form.get("dead_air_on", "true").lower() == "true",
         "dead_air_aggr": _valid_aggr(request.form.get("dead_air_aggr", "medium")),
         "music_path": music_path,
+        # Background-music loudness the customer picked (1-100%) → 0.01-1.0.
+        "music_volume": _to_int(request.form.get("music_volume"), 20, 1, 100) / 100.0,
         # 0 = deterministic "best" cut; any other value = a different variation
         # of the same footage ("🎲 สุ่มรูปแบบใหม่").
         "variation": _to_int(request.form.get("variation"), 0, 0, 10_000_000),
@@ -501,16 +508,23 @@ def _apply_captions(job, cut_paths, clips, tr, canvas, opts, fmt, idx):
     for ci, (clip_path, clip) in enumerate(zip(cut_paths, clips)):
         cinfo = media.probe(clip_path)
         # build_captions returns times already relative to this single clip (0-based).
-        captions = subtitles.build_captions([clip], tr, important_only=True)
+        # Show every spoken line (word-level, in sync) — not just keyword lines.
+        captions = subtitles.build_captions([clip], tr, important_only=False)
         if not captions:
             out.append(clip_path)
             continue
         dst = clip_path.replace(f".{fmt}", f"_sub.{fmt}")
         work = os.path.join(job.work_dir, f"hf_{idx:02d}_{ci:02d}")
+        overlay_out = None
+        if opts.get("subtitle_overlay_export"):
+            overlay_out = os.path.join(job.work_dir, f"overlay_{idx:02d}_{ci:02d}.mov")
         result = subtitles.burn(clip_path, captions, dst, canvas=canvas,
                                 duration=cinfo.duration or clip.duration,
-                                style=opts["subtitle_style"], fmt=fmt,
+                                style=opts["subtitle_style"], font=opts["subtitle_font"],
+                                overlay_out=overlay_out, fmt=fmt,
                                 work_dir=work, log=job.log)
+        if overlay_out and os.path.exists(overlay_out):
+            job.overlays.append(overlay_out)
         out.append(result if os.path.exists(result) else clip_path)
     return out
 
@@ -531,6 +545,7 @@ def _build_merged(job, clips, opts, fmt, max_duration) -> str:
         with_music = os.path.join(job.work_dir, f"merged_music.{fmt}")
         merged = editor.add_music(merged, opts["music_path"], with_music,
                                   fmt=fmt, max_duration=max_duration,
+                                  music_volume=opts["music_volume"],
                                   crf=opts["crf"], log=job.log)
     return merged
 
@@ -563,6 +578,18 @@ def _finalize(job, videos: list[str], opts: dict, fmt: str) -> dict:
         for i, v in enumerate(videos, 1):
             stem = base if single else f"{base} {i:02d}"
             editor.extract_audio(v, os.path.join(mp3_dir, f"{stem}.mp3"), log=job.log)
+
+    # Transparent subtitle overlays (.mov w/ alpha) for editing elsewhere.
+    if opts.get("subtitle_overlay_export") and job.overlays:
+        job.set(stage="แยกซับไตเติล", pct=98, message="📑 บันทึก overlay ซับไตเติล…")
+        ov_dir = os.path.join(proj_dir, "Subtitle Overlay")
+        os.makedirs(ov_dir, exist_ok=True)
+        for i, ov in enumerate(job.overlays, 1):
+            name = f"{base} subtitle.mov" if len(job.overlays) == 1 else f"{base} subtitle {i:02d}.mov"
+            try:
+                shutil.copy2(ov, os.path.join(ov_dir, name))
+            except OSError:
+                pass
 
     return {"output_dir": proj_dir, "name": proj_name, "count": len(videos)}
 
@@ -620,7 +647,7 @@ def _valid_aggr(a: str) -> str:
 
 
 # Output quality / size validators.
-_CRF = {"high": 20, "medium": 24, "saver": 28}
+_CRF = {"high": 18, "medium": 24, "saver": 28}  # high = sharp, large (the only UI option now)
 
 
 def _valid_aspect(a: str) -> str:

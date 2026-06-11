@@ -117,6 +117,32 @@ def _promote_staged(root: str) -> None:
         print(f"[update] promote failed: {e}", flush=True)
 
 
+def _version_of(init_path: str) -> str:
+    """Read __version__ from an autocut/__init__.py file (text scan, no import)."""
+    try:
+        import re
+        with open(init_path, encoding="utf-8") as f:
+            m = re.search(r'__version__\s*=\s*["\']([^"\']+)["\']', f.read())
+        return m.group(1) if m else "0"
+    except OSError:
+        return "0"
+
+
+def _bundled_version() -> str:
+    """Version baked into this frozen build (overlay finder not yet active)."""
+    try:
+        import autocut
+        return str(getattr(autocut, "__version__", "0"))
+    except Exception:  # noqa: BLE001
+        return "0"
+
+
+def _is_newer(a: str, b: str) -> bool:
+    def parts(v):
+        return [int(x) if x.isdigit() else 0 for x in str(v).split(".")]
+    return parts(a) > parts(b)
+
+
 def _activate_overlay() -> str | None:
     """Promote any staged patch, register the finder, return the overlay dir."""
     if not getattr(sys, "frozen", False):
@@ -129,6 +155,15 @@ def _activate_overlay() -> str | None:
     current = os.path.join(root, "current")
     if not (os.path.isfile(os.path.join(current, "index.html"))
             and os.path.isfile(os.path.join(current, "app.py"))):
+        return None
+    # Only let the overlay win if it is NEWER than this installed build.  A fresh
+    # full install (e.g. v1.3) must supersede a stale OTA overlay (e.g. v1.2);
+    # otherwise the customer would keep running the old patched code.
+    ov = _version_of(os.path.join(current, "autocut", "__init__.py"))
+    bundled = _bundled_version()
+    if not _is_newer(ov, bundled):
+        print(f"[update] retiring stale overlay {ov} (bundled {bundled})", flush=True)
+        shutil.rmtree(current, ignore_errors=True)
         return None
     sys.meta_path.insert(0, _OverlayFinder(current))
     os.environ["AUTOCUT_CODE_DIR"] = current
@@ -181,7 +216,7 @@ def _setup_environment() -> None:
     if os.path.isfile(fp):
         os.environ.setdefault("AUTOCUT_FFPROBE", fp)
 
-    model_dir = os.path.join(base, "models", "faster-whisper-small")
+    model_dir = os.path.join(base, "models", "faster-whisper-medium")
     if os.path.isdir(model_dir):
         os.environ.setdefault("AUTOCUT_WHISPER_MODEL", model_dir)
 

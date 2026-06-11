@@ -120,14 +120,28 @@ def _find_ffprobe() -> str | None:
     )
 
 
+def _bundled_node_dir() -> str | None:
+    """Portable Node shipped with the app (``<bundle>/node/``), if present."""
+    d = os.path.join(bundle_dir(), "node")
+    return d if os.path.isdir(d) else None
+
+
 def _find_npx() -> str | None:
-    # In a packaged (frozen) build we deliberately ship only the offline
-    # ffmpeg/libass subtitle path.  If the customer happens to have Node,
-    # `npx --yes hyperframes` would try to fetch packages from the internet and
-    # could hang — so disable HyperFrames unless explicitly re-enabled.
-    if getattr(sys, "frozen", False) and not os.environ.get("AUTOCUT_ENABLE_HYPERFRAMES"):
+    """Locate npx for the HyperFrames caption engine (online mode).
+
+    AutoCut Pro renders premium captions with HyperFrames, which needs Node.
+    We prefer a Node bundled next to the app so customers don't have to install
+    anything; otherwise we use a system Node.  Set AUTOCUT_DISABLE_HYPERFRAMES=1
+    to force the offline libass fallback.
+    """
+    if os.environ.get("AUTOCUT_DISABLE_HYPERFRAMES"):
         return None
-    # npx ships with node; on Windows it is npx.cmd.
+    nd = _bundled_node_dir()
+    if nd:
+        for cand in ("npx.cmd", "npx"):
+            p = os.path.join(nd, cand)
+            if os.path.isfile(p):
+                return p
     return shutil.which("npx") or shutil.which("npx.cmd")
 
 
@@ -180,6 +194,10 @@ def subprocess_env() -> dict:
             d = os.path.dirname(tool)
             if d and d not in extra:
                 extra.append(d)
+    # Bundled Node (for the HyperFrames CLI) must be on PATH so npx can spawn node.
+    nd = _bundled_node_dir()
+    if nd and nd not in extra:
+        extra.append(nd)
     if extra:
         env["PATH"] = os.pathsep.join(extra) + os.pathsep + env.get("PATH", "")
     return env

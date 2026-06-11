@@ -103,19 +103,36 @@ if ((Test-Path (Join-Path $ffOut "ffmpeg.exe")) -and (Test-Path (Join-Path $ffOu
     Ok "ffmpeg + ffprobe staged"
 }
 
-# --- Whisper small model (offline) ---
-$modelDir = Join-Path $PAYLOAD "models\faster-whisper-small"
+# --- Whisper medium model (better Thai accuracy) ---
+$modelDir = Join-Path $PAYLOAD "models\faster-whisper-medium"
 if (Test-Path (Join-Path $modelDir "model.bin")) {
     Info "Whisper model already staged"
 } else {
-    Info "Downloading faster-whisper 'small' model (~460MB, one time) ..."
+    Info "Downloading faster-whisper 'medium' model (~1.5GB, one time) ..."
     $dl = "from faster_whisper import download_model; " +
-          "download_model('small', output_dir=r'$modelDir')"
+          "download_model('medium', output_dir=r'$modelDir')"
     & $PYV -c $dl
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path (Join-Path $modelDir "model.bin"))) {
         Die "model download failed"
     }
     Ok "Whisper model staged"
+}
+
+# --- Portable Node (for the HyperFrames caption engine; online mode) ---
+$nodeOut = Join-Path $PAYLOAD "node"
+if (Test-Path (Join-Path $nodeOut "npx.cmd")) {
+    Info "Node already staged"
+} else {
+    $nodeSrc = ""
+    $ncmd = Get-Command node -ErrorAction SilentlyContinue
+    if ($ncmd) { $nodeSrc = Split-Path -Parent $ncmd.Source }
+    if (-not $nodeSrc -or -not (Test-Path (Join-Path $nodeSrc "node.exe"))) {
+        Die "Node.js not found to bundle. Install Node (winget install OpenJS.NodeJS.LTS)"
+    }
+    Info "Copying portable Node from: $nodeSrc"
+    New-Item -ItemType Directory -Force $nodeOut | Out-Null
+    Copy-Item (Join-Path $nodeSrc "*") $nodeOut -Recurse -Force
+    Ok "Node staged"
 }
 
 # --- Thai font (best-effort; Tahoma is the guaranteed fallback) ---
@@ -147,23 +164,31 @@ Ok "PyInstaller build complete"
 Step "4/6  Copy payload next to exe"
 Copy-Item (Join-Path $PAYLOAD "ffmpeg") $DIST -Recurse -Force
 Copy-Item (Join-Path $PAYLOAD "models") $DIST -Recurse -Force
+Copy-Item (Join-Path $PAYLOAD "node")   $DIST -Recurse -Force
 if (Get-ChildItem (Join-Path $PAYLOAD "fonts") -Filter *.ttf -ErrorAction SilentlyContinue) {
     Copy-Item (Join-Path $PAYLOAD "fonts") $DIST -Recurse -Force
 }
 # A friendly readme for the customer in the portable folder.
 $readme = Join-Path $DIST "อ่านก่อนใช้งาน.txt"
 @"
-AutoCut Pro — โปรแกรมตัดต่อวิดีโอรีวิวอัตโนมัติ
+AutoCut Pro v1.3 — ตัดคลิปรีวิวอัตโนมัติด้วย AI
 
-วิธีใช้:
-  1. ดับเบิลคลิก  AutoCutPro.exe
-  2. โปรแกรมจะเปิดเบราว์เซอร์ให้อัตโนมัติ (http://localhost:5000)
-  3. ลากไฟล์วิดีโอลงไป -> ตั้งค่า -> กด "ตัดต่อวิดีโออัตโนมัติ"
+วิธีใช้ (ง่าย ๆ 4 ขั้น):
+  1. ดับเบิลคลิก AutoCutPro.exe (เปิดเป็นหน้าต่างโปรแกรม)
+  2. ครั้งแรกใส่ "คีย์เปิดใช้งาน" — ส่งรหัสเครื่องให้แอดมินเพื่อรับคีย์ (ทำครั้งเดียว)
+  3. ลากวิดีโอลงไป -> เลือกสไตล์ซับ/ฟอนต์/เพลงตามต้องการ
+  4. กด "ตัดคลิปอัตโนมัติ" -> เสร็จแล้วโฟลเดอร์ผลลัพธ์จะเด้งขึ้นมาเอง
+
+ไฟล์ที่ได้ (ในโฟลเดอร์ AutoCut Output\<ชื่อ> <วันเวลา>):
+  - Video\           คลิปที่ตัดเสร็จ
+  - mp3\             ไฟล์เสียง (ถ้าเลือกแยกเสียง)
+  - Subtitle Overlay\ ไฟล์ซับโปร่งใส (ถ้าเลือกแยกซับไว้ตัดต่อเอง)
 
 หมายเหตุ:
-  - ทำงานแบบออฟไลน์ 100% ไม่ต้องต่ออินเทอร์เน็ต
-  - ครั้งแรกที่เปิด Windows อาจถามเรื่องไฟร์วอลล์ ให้กด Allow
-  - ปิดโปรแกรมด้วยการปิดหน้าต่างสีดำ (Console)
+  - ต้องต่ออินเทอร์เน็ตสำหรับซับไตเติลพรีเมียม (HyperFrames) — ครั้งแรกจะโหลดตัวช่วย
+    ครั้งเดียว ครั้งต่อไปเร็วขึ้น ถ้าไม่มีเน็ตจะใช้ซับแบบสำรองให้อัตโนมัติ
+  - ครั้งแรก Windows อาจถามไฟร์วอลล์ ให้กด Allow
+  - ปิดโปรแกรม = ปิดหน้าต่าง
 "@ | Out-File -FilePath $readme -Encoding utf8
 Ok "Payload copied"
 
