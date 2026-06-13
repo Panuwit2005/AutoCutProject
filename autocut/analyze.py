@@ -221,12 +221,14 @@ def _silence_intervals(path: str, noise_db: int, min_silence: float, log=None):
 # Dead-air removal — tighten the chosen clips by dropping non-speech pauses
 # ---------------------------------------------------------------------------
 # How long a pause has to be before we treat it as dead air, per aggressiveness.
+# v1.4: only cut clearly-long pauses (sentence breaks) so the result reads like
+# the old transcript-based cut — fewer, cleaner cuts instead of choppy micro-cuts.
 DEAD_AIR_PRESETS = {
-    "gentle": {"max_gap": 0.80, "min_silence": 0.80},
-    "medium": {"max_gap": 0.50, "min_silence": 0.55},
-    "strong": {"max_gap": 0.30, "min_silence": 0.35},
+    "gentle": {"max_gap": 1.00, "min_silence": 1.00},
+    "medium": {"max_gap": 0.70, "min_silence": 0.75},
+    "strong": {"max_gap": 0.45, "min_silence": 0.50},
 }
-EDGE_PAD = 0.10     # keep this much around kept speech so onsets aren't clipped
+EDGE_PAD = 0.16     # keep this much around kept speech so onsets/tails aren't clipped
 
 
 def trim_dead_air(clips: list[Clip], transcript=None, path: str | None = None, *,
@@ -298,16 +300,28 @@ def _dead_air_by_words(clips: list[Clip], words, max_gap: float,
 def _dead_air_by_silence(clips: list[Clip], path: str, min_silence: float, *,
                          noise_db: int = -32, edge_pad: float = EDGE_PAD,
                          log=None) -> list[Clip]:
-    """Subtract detected silence spans from each clip."""
+    """Subtract detected silence spans from each clip, then tidy the result so it
+    reads smoothly (no choppy micro-cuts, no dropped audio fragments)."""
     spans = _silence_spans(path, noise_db, min_silence, log)
     if not spans:
         return clips
     out: list[Clip] = []
     for c in clips:
-        for s, e in _subtract_silences(c.start, c.end, spans, edge_pad):
-            if e - s >= MIN_CLIP:
-                out.append(Clip(s, e, c.text, c.score))
+        pieces = _subtract_silences(c.start, c.end, spans, edge_pad)
+        out.extend(_tidy_pieces(pieces, c))
     return out or clips
+
+
+def _tidy_pieces(pieces: list[tuple[float, float]], c: Clip) -> list[Clip]:
+    """Absorb too-short speech fragments into the previous kept piece (keeps the
+    audio continuous and avoids jarring micro-cuts), then drop any leading runt."""
+    merged: list[list[float]] = []
+    for s, e in pieces:
+        if merged and (e - s) < MIN_CLIP:
+            merged[-1][1] = e                 # swallow a short fragment + its gap
+        else:
+            merged.append([s, e])
+    return [Clip(s, e, c.text, c.score) for s, e in merged if (e - s) >= MIN_CLIP]
 
 
 def _silence_spans(path: str, noise_db: int, min_silence: float, log=None):

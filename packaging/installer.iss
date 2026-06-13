@@ -3,7 +3,7 @@
 ; "click Next to install" Windows setup with Desktop / Start Menu shortcuts.
 
 #define MyAppName "AutoCut Pro"
-#define MyAppVersion "1.4"
+#define MyAppVersion "1.5"
 #define MyAppPublisher "Kapoo"
 #define MyAppExe "AutoCutPro.exe"
 

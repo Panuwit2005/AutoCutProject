@@ -12,4 +12,4 @@ No AI / no Node / no internet required — the whole pipeline is ffmpeg-only.
 Orchestrated from ``app.py``.
 """
 
-__version__ = "1.4"
+__version__ = "1.5"
