@@ -300,7 +300,7 @@ class PublishTab:
 # ===========================================================================
 def main() -> None:
     root = tk.Tk()
-    root.title("AutoCut — เครื่องมือ Admin")
+    root.title("AutoCut Admin — สร้างคีย์ & อัปเดต")
     root.geometry("620x720")
     root.configure(bg=BG)
     try:

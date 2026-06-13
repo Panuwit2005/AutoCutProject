@@ -5,8 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AutoCut — ตัดคลิปอัตโนมัติ</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<!-- "Hit" social caption fonts (for the subtitle font picker preview) -->
-<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@700;800&family=Prompt:wght@700&family=Mitr:wght@600&family=Bai+Jamjuree:wght@700&family=Chakra+Petch:wght@700&family=Anuphan:wght@700&family=Mali:wght@700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/style.css">
 <script>
   // Apply saved theme before paint to avoid a flash.
@@ -37,37 +35,6 @@
     background:transparent; color:var(--accent); cursor:pointer; font-size:14px; white-space:nowrap; }
   .lic-err { color:var(--danger); font-size:14px; margin-top:12px; min-height:18px; }
 
-  /* ---- Caption style picker + live preview ---- */
-  .style-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr));
-    gap:10px; }
-  .style-grid .style-btn { display:flex; align-items:center; justify-content:center;
-    text-align:center; padding:14px 8px; font-size:15px; min-height:52px; }
-  .style-preview { display:flex; align-items:center; justify-content:center;
-    height:130px; margin-bottom:14px; border-radius:var(--radius-sm);
-    background:radial-gradient(circle at 50% 40%, #23232e, #0c0c12);
-    border:1px solid var(--border); overflow:hidden; }
-  .cap-preview { display:inline-block; line-height:1.2; padding:10px 22px; font-size:30px;
-    font-family:'Noto Sans Thai','Sarabun',sans-serif; animation:capIn .5s ease-out; }
-  @keyframes capIn { from{opacity:0; transform:translateY(18px);} to{opacity:1; transform:none;} }
-  @keyframes capPop { 0%{opacity:0; transform:translateY(40px) scale(.5);} 70%{transform:translateY(0) scale(1.08);} 100%{opacity:1; transform:scale(1);} }
-  @keyframes glowPulse { 0%,100%{filter:brightness(1);} 50%{filter:brightness(1.5);} }
-  @keyframes gradShift { to{background-position:-300% 0;} }
-  @keyframes wipeIn { from{clip-path:inset(0 100% 0 0);} to{clip-path:inset(0 0 0 0);} }
-  @keyframes glitchX { 0%,100%{transform:translateX(0);} 25%{transform:translateX(-3px);} 75%{transform:translateX(3px);} }
-  @keyframes flickerIn { 0%{opacity:0; filter:blur(6px);} 100%{opacity:1; filter:blur(0);} }
-  .cap-preview.highlight { font-weight:800; color:#111; background:#FFD600; border-radius:10px; box-shadow:0 6px 18px rgba(0,0,0,.45); }
-  .cap-preview.pill { font-weight:700; color:#fff; background:#1a1a2e; border:3px solid #00E5A0; border-radius:999px; }
-  .cap-preview.neon-glow { font-weight:800; color:#fff; text-shadow:0 0 8px #00E5A0,0 0 18px #00E5A0,0 0 36px #00E5A0; animation:capIn .5s ease-out, glowPulse 1.6s ease-in-out infinite; }
-  .cap-preview.neon-accent { font-weight:800; color:#fff; border-bottom:5px solid #00E5FF; padding-bottom:3px; text-shadow:0 0 10px rgba(0,229,255,.6); }
-  .cap-preview.kinetic-slam { font-weight:900; color:#FFD600; -webkit-text-stroke:2px #FF6B35; animation:capPop .5s ease-out; }
-  .cap-preview.clip-wipe { font-weight:900; color:#fff; text-shadow:0 3px 10px rgba(0,0,0,.7); animation:wipeIn .5s ease-out; }
-  .cap-preview.gradient-fill { font-weight:900; background:linear-gradient(90deg,#FFD600,#FF6B35,#FF2D95,#FFD600); background-size:300% 100%; -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent; animation:gradShift 3s linear infinite; }
-  .cap-preview.glitch-rgb { font-weight:900; color:#fff; text-shadow:3px 0 #ff003c,-3px 0 #00e5ff; animation:glitchX .25s steps(2) infinite; }
-  .cap-preview.matrix-decode { font-weight:800; color:#00FF6A; font-family:'Consolas',monospace; text-shadow:0 0 10px rgba(0,255,106,.7); animation:flickerIn .5s ease-out; }
-  .cap-preview.weight-shift { font-weight:900; color:#fff; letter-spacing:1px; }
-  .cap-preview.editorial { font-weight:700; color:#fff; letter-spacing:3px; text-transform:uppercase; }
-  .cap-preview.emoji-pop { font-weight:900; color:#fff; text-shadow:0 0 4px #000,0 6px 14px rgba(0,0,0,.6); animation:capPop .5s ease-out; }
-  .cap-preview.pill-karaoke { font-weight:800; color:#111; background:#FFD600; border-radius:999px; padding:10px 30px; }
 </style>
 </head>
 <body>
@@ -236,34 +203,6 @@
         </div>
       </div>
 
-      <!-- Subtitle -->
-      <div class="opt-block">
-        <label class="opt-title" data-i18n="sub.label">📝 Subtitle อัตโนมัติ</label>
-        <div class="toggle-row">
-          <label class="toggle-switch">
-            <input type="checkbox" id="subtitleToggle" onchange="onSubtitleToggle()">
-            <span class="toggle-slider"></span>
-          </label>
-          <span class="toggle-label" id="subtitleToggleLabel"></span>
-        </div>
-        <div id="subtitleOptions" style="display:none;">
-          <div class="field-hint" style="margin-bottom:12px;" data-i18n="sub.styleHint">เลือกสไตล์คำบรรยาย (เอาเมาส์ชี้เพื่อดูตัวอย่าง):</div>
-          <!-- Live animated preview of the hovered/selected style -->
-          <div class="style-preview" id="stylePreview">
-            <span class="cap-preview highlight" id="stylePreviewText">ตัวอย่าง Subtitle</span>
-          </div>
-          <div class="style-grid" id="styleGrid"></div>
-
-          <div class="field-hint" style="margin:18px 0 8px;" data-i18n="sub.fontHint">เลือกฟอนต์ (ฮิตในโซเชียล):</div>
-          <div class="style-grid" id="fontGrid"></div>
-
-          <label style="display:flex;align-items:center;gap:12px;cursor:pointer;margin-top:18px;font-size:15px;color:var(--text);">
-            <input type="checkbox" id="subOverlayToggle" style="width:20px;height:20px;"
-                   onchange="subOverlayExport=this.checked;">
-            <span data-i18n="sub.overlay">📑 แยกไฟล์ซับไตเติล (overlay โปร่งใส) ไว้ตัดต่อเองในโปรแกรมอื่น</span>
-          </label>
-        </div>
-      </div>
 
       <!-- L/J cut -->
       <div class="opt-block">
@@ -385,7 +324,7 @@
         </div>
         <div class="step-item" id="step4">
           <div class="step-num">4</div>
-          <div><div class="step-label" data-i18n="step4.t">✂️ ตัด + ใส่ซับไตเติล</div><div class="step-sub" data-i18n="step4.s">ตัดคลิปและใส่คำบรรยาย</div></div>
+          <div><div class="step-label" data-i18n="step4.t">✂️ ตัดต่อ + บันทึกไฟล์</div><div class="step-sub" data-i18n="step4.s">ตัดคลิปแล้วบันทึกเป็นโฟลเดอร์</div></div>
         </div>
         <div class="step-item" id="step5">
           <div class="step-num">5</div>
@@ -495,7 +434,7 @@ const I18N = {
     'warn':'<strong>อย่ารีเฟรชหรือปิดแท็บนี้!</strong><br>ถ้ารีเฟรช งานจะถูกยกเลิกและต้องเริ่มใหม่ทั้งหมด',
     'prog.detail':'รายละเอียดการทำงาน',
     'step1.t':'📤 รับวิดีโอ','step1.s':'อัปโหลดไฟล์','step2.t':'⚙️ เตรียมไฟล์ + ถอดเสียง','step2.s':'รองรับทุกชนิด แล้วให้ AI ฟังเสียง',
-    'step3.t':'🧠 วิเคราะห์ช่วงที่ดีที่สุด','step3.s':'เลือกช่วงที่น่าสนใจ','step4.t':'✂️ ตัด + ใส่ซับไตเติล','step4.s':'ตัดคลิปและใส่คำบรรยาย',
+    'step3.t':'🧠 วิเคราะห์ช่วงที่ดีที่สุด','step3.s':'เลือกช่วงที่น่าสนใจ','step4.t':'✂️ ตัดต่อ + บันทึกไฟล์','step4.s':'ตัดคลิปแล้วบันทึกเป็นโฟลเดอร์',
     'step5.t':'💾 บันทึกลงโฟลเดอร์','step5.s':'จัดเก็บผลลัพธ์',
     'res.label':'เสร็จแล้ว! 🎉','res.title':'บันทึกสำเร็จ!','res.sub':'บันทึกคลิปลงโฟลเดอร์เรียบร้อยแล้ว',
     'res.subDone':'🎬 บันทึกลงโฟลเดอร์ “{name}” แล้ว','res.pathLabel':'📁 ตำแหน่งไฟล์',
@@ -563,7 +502,7 @@ const I18N = {
     'warn':"<strong>Don't refresh or close this tab!</strong><br>Refreshing cancels the job and you'll start over.",
     'prog.detail':'Details',
     'step1.t':'📤 Receive video','step1.s':'Uploading files','step2.t':'⚙️ Prepare + transcribe','step2.s':'Handle any format, then AI listens',
-    'step3.t':'🧠 Find the best moments','step3.s':'Pick the interesting parts','step4.t':'✂️ Cut + subtitles','step4.s':'Cut clips and add captions',
+    'step3.t':'🧠 Find the best moments','step3.s':'Pick the interesting parts','step4.t':'✂️ Cut + save','step4.s':'Cut clips and save to a folder',
     'step5.t':'💾 Save to folder','step5.s':'Store the result',
     'res.label':'Done! 🎉','res.title':'Saved!','res.sub':'Your clips have been saved to a folder',
     'res.subDone':'🎬 Saved to folder “{name}”','res.pathLabel':'📁 File location',
@@ -592,7 +531,7 @@ function toggleLang() {
 }
 // Re-render everything that JS sets dynamically (so language switch updates it too).
 function refreshDynamic() {
-  onDeadAirToggle(); onSubtitleToggle(); onLjToggle(); onAudioExtractToggle();
+  onDeadAirToggle(); onLjToggle(); onAudioExtractToggle();
   updateDuration(document.getElementById('durationSlider').value);
   updateOverlap(document.getElementById('ljOverlapSlider').value);
   setFormat(selectedFormat);
@@ -645,12 +584,9 @@ let selectedVideos = [];
 let selectedMusic  = null;
 let outputMode     = 'merged';
 let selectedFormat = 'mp4';
-let subtitleStyle  = 'highlight';
-let subtitleFont   = 'Kanit';
-let subOverlayExport = false;
 let ljCutMode      = 'l';
 let deadAirAggr    = 'medium';
-let subtitleOn = false, ljCutOn = false, deadAirOn = true, audioExtractOn = false;
+let ljCutOn = false, deadAirOn = true, audioExtractOn = false;
 let resultDir = null;
 let lastOnline = false, lastStorageInfo = null;
 let pendingUpdate = null;
@@ -792,68 +728,6 @@ function removeFile(i) { selectedVideos.splice(i,1); renderFileList(); }
 // =============================================
 //  Option controls
 // =============================================
-function onSubtitleToggle() {
-  subtitleOn = document.getElementById('subtitleToggle').checked;
-  document.getElementById('subtitleToggleLabel').textContent = subtitleOn ? t('sub.on') : t('sub.off');
-  document.getElementById('subtitleOptions').style.display = subtitleOn ? 'block' : 'none';
-  if (subtitleOn) { buildStyleGrid(); buildFontGrid(); setSubtitleFont(subtitleFont); }
-}
-const STYLE_DEFS = [
-  ['highlight','✨ ไฮไลต์เหลือง'], ['pill','💊 กล่องโค้ง'],
-  ['neon-glow','🌟 นีออนเรืองแสง'], ['neon-accent','🔷 นีออนขีดเส้น'],
-  ['kinetic-slam','⚡ กระแทกเด้ง'], ['clip-wipe','🪄 กวาดเปิด'],
-  ['gradient-fill','🌈 ไล่สี'], ['glitch-rgb','📺 กลิตช์'],
-  ['matrix-decode','🟩 แมทริกซ์'], ['weight-shift','🅱️ น้ำหนักอักษร'],
-  ['editorial','📰 มินิมอล'], ['emoji-pop','🎉 เด้งใหญ่'],
-  ['pill-karaoke','🎤 คาราโอเกะ'],
-];
-function buildStyleGrid() {
-  const grid = document.getElementById('styleGrid');
-  if (!grid || grid.dataset.built) return;
-  grid.dataset.built = '1';
-  grid.innerHTML = STYLE_DEFS.map(([id, label]) =>
-    `<button class="style-btn${id === subtitleStyle ? ' active' : ''}" id="style_${id}"
-       onclick="setSubtitleStyle('${id}')"
-       onmouseenter="showStylePreview('${id}')" onmouseleave="showStylePreview(subtitleStyle)">
-       <span>${label}</span></button>`).join('');
-  showStylePreview(subtitleStyle);
-}
-function showStylePreview(id) {
-  const el = document.getElementById('stylePreviewText');
-  if (!el) return;
-  el.className = 'cap-preview ' + id;
-  // restart the CSS entrance animation
-  el.style.animation = 'none'; void el.offsetWidth; el.style.animation = '';
-}
-function setSubtitleStyle(s) {
-  subtitleStyle = s;
-  STYLE_DEFS.forEach(([x]) => {
-    const b = document.getElementById('style_' + x);
-    if (b) b.className = 'style-btn' + (x === s ? ' active' : '');
-  });
-  showStylePreview(s);
-}
-// Curated "hit" social fonts (Thai + Latin Google Fonts).
-const FONT_DEFS = ['Kanit','Prompt','Mitr','Bai Jamjuree','Chakra Petch','Anuphan','Mali','Noto Sans Thai'];
-function buildFontGrid() {
-  const grid = document.getElementById('fontGrid');
-  if (!grid || grid.dataset.built) return;
-  grid.dataset.built = '1';
-  grid.innerHTML = FONT_DEFS.map(f =>
-    `<button class="style-btn${f === subtitleFont ? ' active' : ''}" id="font_${f.replace(/ /g,'_')}"
-       style="font-family:'${f}',sans-serif;font-weight:700;font-size:18px;"
-       onclick="setSubtitleFont('${f}')">${f}</button>`).join('');
-}
-function setSubtitleFont(f) {
-  subtitleFont = f;
-  FONT_DEFS.forEach(x => {
-    const b = document.getElementById('font_' + x.replace(/ /g,'_'));
-    if (b) b.className = 'style-btn' + (x === f ? ' active' : '');
-  });
-  // reflect the chosen font in the live style preview too
-  const p = document.getElementById('stylePreviewText');
-  if (p) p.style.fontFamily = `'${f}',sans-serif`;
-}
 function onLjToggle() {
   ljCutOn = document.getElementById('ljToggle').checked;
   document.getElementById('ljToggleLabel').textContent = ljCutOn ? t('lj.on') : t('lj.off');
@@ -934,10 +808,6 @@ async function startProcess() {
   formData.append('max_duration',   document.getElementById('durationSlider').value);
   formData.append('output_mode',    outputMode);
   formData.append('output_format',  selectedFormat);
-  formData.append('subtitle_on',    subtitleOn ? 'true' : 'false');
-  formData.append('subtitle_style', subtitleStyle);
-  formData.append('subtitle_font', subtitleFont);
-  formData.append('subtitle_overlay_export', subOverlayExport ? 'true' : 'false');
   formData.append('lj_cut_on',      ljCutOn ? 'true' : 'false');
   formData.append('lj_cut_mode',    ljCutMode);
   formData.append('lj_overlap',     document.getElementById('ljOverlapSlider').value);

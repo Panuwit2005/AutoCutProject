@@ -22,12 +22,9 @@ hiddenimports = ["waitress", "flask_cors",
                  "webview", "webview.platforms.winforms",
                  "webview.platforms.edgechromium", "clr"]
 
-# Native-extension packages need their compiled libs and data collected.
-# numpy MUST be collected in full: PyInstaller's stock hook can miss
-# numpy._core._exceptions under numpy 2.x, which then breaks every package that
-# imports numpy (ctranslate2 / onnxruntime / faster_whisper).
-for pkg in ("numpy", "faster_whisper", "ctranslate2", "onnxruntime", "av",
-            "tokenizers", "huggingface_hub", "cryptography"):
+# Native-extension packages that need their compiled libs/data collected.
+# (v1.4 dropped the AI stack — no faster_whisper/ctranslate2/onnxruntime/av.)
+for pkg in ("cryptography",):
     d, b, h = collect_all(pkg)
     datas += d
     binaries += b
@@ -57,7 +54,10 @@ a = Analysis(
     # NB: tkinter is intentionally NOT excluded — the native "choose folder"
     # dialog (autocut.folder_picker) needs it.
     excludes=["matplotlib", "torch", "torchaudio", "torchvision",
-              "pandas", "scipy", "PyQt5", "PySide2", "notebook", "IPython"],
+              "pandas", "scipy", "PyQt5", "PySide2", "notebook", "IPython",
+              # AI stack removed in v1.4 — keep them out of the build
+              "faster_whisper", "ctranslate2", "onnxruntime", "av",
+              "tokenizers", "huggingface_hub", "numpy"],
     noarchive=False,
 )
 

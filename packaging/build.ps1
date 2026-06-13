@@ -73,11 +73,9 @@ if ($LASTEXITCODE -ne 0) { Die "dependency install failed" }
 Ok "Build environment ready"
 
 # ---------------------------------------------------------------------------
-Step "2/6  Stage payload (ffmpeg + model + font)"
+Step "2/6  Stage payload (ffmpeg)"
 
 New-Item -ItemType Directory -Force (Join-Path $PAYLOAD "ffmpeg") | Out-Null
-New-Item -ItemType Directory -Force (Join-Path $PAYLOAD "models") | Out-Null
-New-Item -ItemType Directory -Force (Join-Path $PAYLOAD "fonts")  | Out-Null
 
 # --- ffmpeg / ffprobe ---
 $ffOut = Join-Path $PAYLOAD "ffmpeg"
@@ -103,52 +101,7 @@ if ((Test-Path (Join-Path $ffOut "ffmpeg.exe")) -and (Test-Path (Join-Path $ffOu
     Ok "ffmpeg + ffprobe staged"
 }
 
-# --- Whisper medium model (better Thai accuracy) ---
-$modelDir = Join-Path $PAYLOAD "models\faster-whisper-medium"
-if (Test-Path (Join-Path $modelDir "model.bin")) {
-    Info "Whisper model already staged"
-} else {
-    Info "Downloading faster-whisper 'medium' model (~1.5GB, one time) ..."
-    $dl = "from faster_whisper import download_model; " +
-          "download_model('medium', output_dir=r'$modelDir')"
-    & $PYV -c $dl
-    if ($LASTEXITCODE -ne 0 -or -not (Test-Path (Join-Path $modelDir "model.bin"))) {
-        Die "model download failed"
-    }
-    Ok "Whisper model staged"
-}
-
-# --- Portable Node (for the HyperFrames caption engine; online mode) ---
-$nodeOut = Join-Path $PAYLOAD "node"
-if (Test-Path (Join-Path $nodeOut "npx.cmd")) {
-    Info "Node already staged"
-} else {
-    $nodeSrc = ""
-    $ncmd = Get-Command node -ErrorAction SilentlyContinue
-    if ($ncmd) { $nodeSrc = Split-Path -Parent $ncmd.Source }
-    if (-not $nodeSrc -or -not (Test-Path (Join-Path $nodeSrc "node.exe"))) {
-        Die "Node.js not found to bundle. Install Node (winget install OpenJS.NodeJS.LTS)"
-    }
-    Info "Copying portable Node from: $nodeSrc"
-    New-Item -ItemType Directory -Force $nodeOut | Out-Null
-    Copy-Item (Join-Path $nodeSrc "*") $nodeOut -Recurse -Force
-    Ok "Node staged"
-}
-
-# --- Thai font (best-effort; Tahoma is the guaranteed fallback) ---
-$fontFile = Join-Path $PAYLOAD "fonts\NotoSansThai.ttf"
-if (Test-Path $fontFile) {
-    Info "Thai font already staged"
-} else {
-    $url = "https://github.com/google/fonts/raw/main/ofl/notosansthai/NotoSansThai%5Bwdth,wght%5D.ttf"
-    try {
-        Info "Downloading Noto Sans Thai (optional) ..."
-        Invoke-WebRequest -Uri $url -OutFile $fontFile -UseBasicParsing -TimeoutSec 60
-        Ok "Thai font staged"
-    } catch {
-        Info "Font download skipped (will use Windows Tahoma): $($_.Exception.Message)"
-    }
-}
+# (No AI model / Node / fonts — v1.4 cuts by silence detection, fully offline.)
 
 # ---------------------------------------------------------------------------
 Step "3/6  PyInstaller build"
@@ -163,30 +116,24 @@ Ok "PyInstaller build complete"
 # ---------------------------------------------------------------------------
 Step "4/6  Copy payload next to exe"
 Copy-Item (Join-Path $PAYLOAD "ffmpeg") $DIST -Recurse -Force
-Copy-Item (Join-Path $PAYLOAD "models") $DIST -Recurse -Force
-Copy-Item (Join-Path $PAYLOAD "node")   $DIST -Recurse -Force
-if (Get-ChildItem (Join-Path $PAYLOAD "fonts") -Filter *.ttf -ErrorAction SilentlyContinue) {
-    Copy-Item (Join-Path $PAYLOAD "fonts") $DIST -Recurse -Force
-}
 # A friendly readme for the customer in the portable folder.
 $readme = Join-Path $DIST "อ่านก่อนใช้งาน.txt"
 @"
-AutoCut Pro v1.3 — ตัดคลิปรีวิวอัตโนมัติด้วย AI
+AutoCut Pro v1.4 — ตัดคลิปอัตโนมัติ (ออฟไลน์ 100%)
 
 วิธีใช้ (ง่าย ๆ 4 ขั้น):
   1. ดับเบิลคลิก AutoCutPro.exe (เปิดเป็นหน้าต่างโปรแกรม)
   2. ครั้งแรกใส่ "คีย์เปิดใช้งาน" — ส่งรหัสเครื่องให้แอดมินเพื่อรับคีย์ (ทำครั้งเดียว)
-  3. ลากวิดีโอลงไป -> เลือกสไตล์ซับ/ฟอนต์/เพลงตามต้องการ
+  3. ลากวิดีโอลงไป -> ตั้งค่า (ความยาว / เพลง / แยกเสียง) ตามต้องการ
   4. กด "ตัดคลิปอัตโนมัติ" -> เสร็จแล้วโฟลเดอร์ผลลัพธ์จะเด้งขึ้นมาเอง
 
 ไฟล์ที่ได้ (ในโฟลเดอร์ AutoCut Output\<ชื่อ> <วันเวลา>):
-  - Video\           คลิปที่ตัดเสร็จ
-  - mp3\             ไฟล์เสียง (ถ้าเลือกแยกเสียง)
-  - Subtitle Overlay\ ไฟล์ซับโปร่งใส (ถ้าเลือกแยกซับไว้ตัดต่อเอง)
+  - Video\   คลิปที่ตัดเสร็จ
+  - mp3\     ไฟล์เสียง (เฉพาะเมื่อเลือกแยกเสียง)
 
 หมายเหตุ:
-  - ต้องต่ออินเทอร์เน็ตสำหรับซับไตเติลพรีเมียม (HyperFrames) — ครั้งแรกจะโหลดตัวช่วย
-    ครั้งเดียว ครั้งต่อไปเร็วขึ้น ถ้าไม่มีเน็ตจะใช้ซับแบบสำรองให้อัตโนมัติ
+  - ทำงานออฟไลน์ 100% ไม่ต้องต่ออินเทอร์เน็ต
+  - โปรแกรมจะเลือกเฉพาะช่วงที่มีคนพูดและตัดช่วงเงียบให้อัตโนมัติ
   - ครั้งแรก Windows อาจถามไฟร์วอลล์ ให้กด Allow
   - ปิดโปรแกรม = ปิดหน้าต่าง
 "@ | Out-File -FilePath $readme -Encoding utf8

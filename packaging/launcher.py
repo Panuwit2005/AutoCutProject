@@ -215,14 +215,7 @@ def _setup_environment() -> None:
         os.environ.setdefault("AUTOCUT_FFMPEG", fm)
     if os.path.isfile(fp):
         os.environ.setdefault("AUTOCUT_FFPROBE", fp)
-
-    model_dir = os.path.join(base, "models", "faster-whisper-medium")
-    if os.path.isdir(model_dir):
-        os.environ.setdefault("AUTOCUT_WHISPER_MODEL", model_dir)
-
-    os.environ.setdefault("HF_HUB_OFFLINE", "1")
-    os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
-    os.environ.setdefault("AUTOCUT_LANGUAGE", "th")
+    # v1.4: no AI model / no online deps — cutting is ffmpeg silence detection.
 
 
 def _free_port(preferred: int = 5000) -> int:
@@ -393,12 +386,12 @@ def main() -> None:
 
 
 def _selftest() -> int:
-    """Import each heavy dependency in isolation and report failures."""
+    """Import each dependency in isolation and report failures."""
     _setup_environment()
     import traceback
-    mods = ["numpy", "av", "ctranslate2", "onnxruntime", "tokenizers",
-            "huggingface_hub", "requests", "faster_whisper",
-            "flask", "flask_cors", "waitress", "cryptography"]
+    mods = ["flask", "flask_cors", "waitress", "cryptography",
+            "app", "autocut.tools", "autocut.editor", "autocut.analyze",
+            "autocut.media", "autocut.storage", "autocut.licensing", "autocut.updater"]
     bad = 0
     for m in mods:
         try:
@@ -408,15 +401,6 @@ def _selftest() -> int:
             bad += 1
             print(f"[FAIL] import {m}")
             traceback.print_exc()
-    try:
-        from faster_whisper import WhisperModel
-        md = os.environ.get("AUTOCUT_WHISPER_MODEL", "small")
-        WhisperModel(md, device="cpu", compute_type="int8")
-        print(f"[ok]   WhisperModel loaded from {md}")
-    except Exception:
-        bad += 1
-        print("[FAIL] WhisperModel load")
-        traceback.print_exc()
     print(f"SELFTEST {'PASS' if bad == 0 else 'FAIL (' + str(bad) + ')'}")
     return 1 if bad else 0
 

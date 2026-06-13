@@ -3,7 +3,7 @@
 ; "click Next to install" Windows setup with Desktop / Start Menu shortcuts.
 
 #define MyAppName "AutoCut Pro"
-#define MyAppVersion "1.2"
+#define MyAppVersion "1.4"
 #define MyAppPublisher "Kapoo"
 #define MyAppExe "AutoCutPro.exe"
 
@@ -23,6 +23,7 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=admin
 WizardStyle=modern
+SetupIconFile=app.ico
 UninstallDisplayName={#MyAppName}
 UninstallDisplayIcon={app}\{#MyAppExe}
 

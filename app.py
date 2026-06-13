@@ -35,8 +35,8 @@ for _stream in (sys.stdout, sys.stderr):
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 
-from autocut import (analyze, editor, licensing, media, storage, subtitles,
-                     tools, transcribe, updater)
+from autocut import (analyze, editor, licensing, media, storage,
+                     tools, updater)
 
 # Route all temp/work files to the roomiest writable drive (avoids
 # "No space left on device" on machines with a full system drive) and sweep up
@@ -53,8 +53,6 @@ app.config["MAX_CONTENT_LENGTH"] = 8 * 1024 * 1024 * 1024  # 8 GB
 HERE = (os.environ.get("AUTOCUT_CODE_DIR")
         or getattr(sys, "_MEIPASS", None)
         or os.path.dirname(os.path.abspath(__file__)))
-WHISPER_MODEL = os.environ.get("AUTOCUT_WHISPER_MODEL", "small")
-LANGUAGE = os.environ.get("AUTOCUT_LANGUAGE", "th")
 
 # In-memory job registry.
 JOBS: dict[str, "Job"] = {}
@@ -75,7 +73,6 @@ class Job:
         self.logs: list[str] = []
         self.error: str | None = None
         self.output_dir: str | None = None     # folder where deliverables were saved
-        self.overlays: list[str] = []          # transparent caption overlays to export
         self.result_name: str | None = None     # that folder's display name
         self.created = datetime.now(timezone.utc)
         self.started_at: float | None = None   # monotonic when work began (count-up timer)
@@ -234,10 +231,7 @@ def debug():
     return jsonify({
         "ffmpeg": st.ffmpeg or "❌ not found",
         "ffprobe": st.ffprobe or "❌ not found",
-        "npx": st.npx or "❌ not found",
-        "transcribe": "✅ faster-whisper" if transcribe.available() else "⚠️ silence-only",
-        "whisper_model": WHISPER_MODEL,
-        "language": LANGUAGE,
+        "mode": "silence-cut (offline, no AI)",
     })
 
 
@@ -306,12 +300,6 @@ def process_video():
         "max_duration": _to_int(request.form.get("max_duration"), 60, 5, 600),
         "output_mode": request.form.get("output_mode", "zip"),
         "output_format": _valid_format(request.form.get("output_format", "mp4")),
-        "subtitle_on": request.form.get("subtitle_on", "false").lower() == "true",
-        "subtitle_style": request.form.get("subtitle_style", "highlight"),
-        "subtitle_font": request.form.get("subtitle_font", "Kanit"),
-        # Also save the transparent caption overlay (.mov) so the customer can
-        # composite it themselves in another editor.
-        "subtitle_overlay_export": request.form.get("subtitle_overlay_export", "false").lower() == "true",
         "sfx_on": request.form.get("sfx_on", "false").lower() == "true",
         "sfx_type": request.form.get("sfx_type", "pop"),
         "lj_cut_on": request.form.get("lj_cut_on", "false").lower() == "true",
@@ -447,34 +435,20 @@ def _pipeline(job: Job, video_paths: list[str], opts: dict) -> dict:
         ninfo = media.probe(norm)
         duration = ninfo.duration or info.duration or 60.0
 
-        # 3. Transcribe (best-effort) ---------------------------------------
-        job.set(stage="ถอดเสียง (AI)", pct=base_pct + 8,
-                message="🎙 กำลังถอดเสียงด้วย AI…")
-        tr = None
-        try:
-            tr = transcribe.transcribe(norm, language=LANGUAGE,
-                                       model_size=WHISPER_MODEL, log=log)
-            log(f"🗣 ถอดเสียงได้ {len(tr.segments)} ช่วง ({tr.engine})")
-        except transcribe.TranscribeUnavailable as e:
-            log(f"⚠️ ถอดเสียงไม่ได้ ({e}) — ใช้การตัดตามช่วงเงียบแทน")
-
-        # 4. Choose the best moments ----------------------------------------
-        job.set(stage="วิเคราะห์ช่วงที่ดีที่สุด", pct=base_pct + 14,
-                message="🧠 เลือกช่วงที่พูดถึงสินค้า/คุณภาพ…")
-        if tr and tr.segments:
-            clips = analyze.select_for_review(tr, max_duration, variation=opts["variation"])
-        else:
-            clips = analyze.speech_zones(norm, duration, max_duration,
-                                         variation=opts["variation"], log=log)
+        # 3. Choose the spoken parts (silence detection — no AI, fully offline) -
+        job.set(stage="วิเคราะห์ช่วงที่พูด", pct=base_pct + 12,
+                message="🔎 เลือกเฉพาะช่วงที่มีคนพูด…")
+        clips = analyze.speech_zones(norm, duration, max_duration,
+                                     variation=opts["variation"], log=log)
         if not clips:
             clips = [analyze.Clip(0.0, min(duration, max_duration))]
         log(f"✅ เลือก {len(clips)} ช่วง รวม {sum(c.duration for c in clips):.1f}s")
 
-        # 4b. Tighten: drop dead air (pauses with no speech) -----------------
+        # 3b. Tighten: drop dead air (silent pauses) ------------------------
         if opts["dead_air_on"]:
             job.set(stage="ตัดช่วงเงียบ (Dead Air)", pct=base_pct + 17,
-                    message="🤫 ตัดช่วงที่ไม่มีเสียงพูดออก…")
-            clips = analyze.trim_dead_air(clips, transcript=tr, path=norm,
+                    message="🤫 ตัดช่วงเงียบออก…")
+            clips = analyze.trim_dead_air(clips, transcript=None, path=norm,
                                           aggressiveness=opts["dead_air_aggr"], log=log)
 
         # 5. Cut -------------------------------------------------------------
@@ -483,50 +457,16 @@ def _pipeline(job: Job, video_paths: list[str], opts: dict) -> dict:
                                      prefix=f"v{idx:02d}", fmt=fmt, crf=crf, log=log)
         if not cut_paths:
             raise tools.ToolError(f"ตัดคลิปไม่สำเร็จสำหรับ {tag}")
-
-        # 6. Captions via HyperFrames (best-effort) -------------------------
-        if opts["subtitle_on"]:
-            cut_paths = _apply_captions(job, cut_paths, clips, tr, canvas,
-                                        opts, fmt, idx)
         all_clips.extend(cut_paths)
 
-    # 7. Build the final video file(s) --------------------------------------
+    # 6. Build the final video file(s) --------------------------------------
     if opts["output_mode"] == "merged":
         videos = [_build_merged(job, all_clips, opts, fmt, max_duration)]
     else:
         videos = all_clips
 
-    # 8. Save into a tidy, named project folder (+ optional MP3 folder) ------
+    # 7. Save into a tidy, named project folder (+ optional MP3 folder) ------
     return _finalize(job, videos, opts, fmt)
-
-
-def _apply_captions(job, cut_paths, clips, tr, canvas, opts, fmt, idx):
-    """Render captions on each cut clip; returns updated paths."""
-    job.set(stage="ใส่ Subtitle (HyperFrames)", pct=80,
-            message=f"📝 สร้าง subtitle ({opts['subtitle_style']})…")
-    out = []
-    for ci, (clip_path, clip) in enumerate(zip(cut_paths, clips)):
-        cinfo = media.probe(clip_path)
-        # build_captions returns times already relative to this single clip (0-based).
-        # Show every spoken line (word-level, in sync) — not just keyword lines.
-        captions = subtitles.build_captions([clip], tr, important_only=False)
-        if not captions:
-            out.append(clip_path)
-            continue
-        dst = clip_path.replace(f".{fmt}", f"_sub.{fmt}")
-        work = os.path.join(job.work_dir, f"hf_{idx:02d}_{ci:02d}")
-        overlay_out = None
-        if opts.get("subtitle_overlay_export"):
-            overlay_out = os.path.join(job.work_dir, f"overlay_{idx:02d}_{ci:02d}.mov")
-        result = subtitles.burn(clip_path, captions, dst, canvas=canvas,
-                                duration=cinfo.duration or clip.duration,
-                                style=opts["subtitle_style"], font=opts["subtitle_font"],
-                                overlay_out=overlay_out, fmt=fmt,
-                                work_dir=work, log=job.log)
-        if overlay_out and os.path.exists(overlay_out):
-            job.overlays.append(overlay_out)
-        out.append(result if os.path.exists(result) else clip_path)
-    return out
 
 
 def _build_merged(job, clips, opts, fmt, max_duration) -> str:
@@ -578,18 +518,6 @@ def _finalize(job, videos: list[str], opts: dict, fmt: str) -> dict:
         for i, v in enumerate(videos, 1):
             stem = base if single else f"{base} {i:02d}"
             editor.extract_audio(v, os.path.join(mp3_dir, f"{stem}.mp3"), log=job.log)
-
-    # Transparent subtitle overlays (.mov w/ alpha) for editing elsewhere.
-    if opts.get("subtitle_overlay_export") and job.overlays:
-        job.set(stage="แยกซับไตเติล", pct=98, message="📑 บันทึก overlay ซับไตเติล…")
-        ov_dir = os.path.join(proj_dir, "Subtitle Overlay")
-        os.makedirs(ov_dir, exist_ok=True)
-        for i, ov in enumerate(job.overlays, 1):
-            name = f"{base} subtitle.mov" if len(job.overlays) == 1 else f"{base} subtitle {i:02d}.mov"
-            try:
-                shutil.copy2(ov, os.path.join(ov_dir, name))
-            except OSError:
-                pass
 
     return {"output_dir": proj_dir, "name": proj_name, "count": len(videos)}
 
@@ -668,9 +596,8 @@ def _valid_fps(f: str) -> int:
 if __name__ == "__main__":
     st = tools.status()
     print("=" * 56)
-    print("  AutoCut Pro backend  v4.0")
+    print("  AutoCut backend")
     print(f"  ffmpeg : {st.ffmpeg or 'NOT FOUND'}")
-    print(f"  whisper: {'faster-whisper' if transcribe.available() else 'silence-only'} ({WHISPER_MODEL})")
     print(f"  เปิดเว็บที่ >> http://localhost:5000 <<")
     print("=" * 56)
     app.run(host="0.0.0.0", port=5000, threaded=True)

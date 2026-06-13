@@ -39,7 +39,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name="AutoCutKeygen",
+    name="AutoCutAdmin",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -49,4 +49,6 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon=os.path.join(SPECPATH, "admin.ico") if os.path.exists(
+        os.path.join(SPECPATH, "admin.ico")) else None,
 )
