@@ -5,6 +5,7 @@
 # Runtime app deps (pinned to stable versions known to ship clean wheels on 3.11)
 flask==3.0.3
 flask-cors==4.0.1
+faster-whisper==1.1.0
 waitress==3.0.0
 
 # Desktop app shell (native window) + offline license signing

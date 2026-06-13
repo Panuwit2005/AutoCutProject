@@ -36,7 +36,7 @@ from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 
 from autocut import (analyze, editor, licensing, media, storage,
-                     tools, updater)
+                     tools, transcribe, updater)
 
 # Route all temp/work files to the roomiest writable drive (avoids
 # "No space left on device" on machines with a full system drive) and sweep up
@@ -53,6 +53,9 @@ app.config["MAX_CONTENT_LENGTH"] = 8 * 1024 * 1024 * 1024  # 8 GB
 HERE = (os.environ.get("AUTOCUT_CODE_DIR")
         or getattr(sys, "_MEIPASS", None)
         or os.path.dirname(os.path.abspath(__file__)))
+# Behind-the-scenes AI (word timing for smarter cuts — never shown to the user).
+WHISPER_MODEL = os.environ.get("AUTOCUT_WHISPER_MODEL", "small")
+LANGUAGE = os.environ.get("AUTOCUT_LANGUAGE", "th")
 
 # In-memory job registry.
 JOBS: dict[str, "Job"] = {}
@@ -231,7 +234,7 @@ def debug():
     return jsonify({
         "ffmpeg": st.ffmpeg or "❌ not found",
         "ffprobe": st.ffprobe or "❌ not found",
-        "mode": "silence-cut (offline, no AI)",
+        "ai": "✅ whisper word-timing" if transcribe.available() else "⚠️ silence-cut fallback",
     })
 
 
@@ -435,20 +438,34 @@ def _pipeline(job: Job, video_paths: list[str], opts: dict) -> dict:
         ninfo = media.probe(norm)
         duration = ninfo.duration or info.duration or 60.0
 
-        # 3. Choose the spoken parts (silence detection — no AI, fully offline) -
-        job.set(stage="วิเคราะห์ช่วงที่พูด", pct=base_pct + 12,
-                message="🔎 เลือกเฉพาะช่วงที่มีคนพูด…")
-        clips = analyze.speech_zones(norm, duration, max_duration,
-                                     variation=opts["variation"], log=log)
+        # 3. AI analysis (behind the scenes) — word timing for smarter cuts.
+        job.set(stage="วิเคราะห์ด้วย AI", pct=base_pct + 8,
+                message="🤖 AI กำลังวิเคราะห์เสียง…")
+        tr = None
+        try:
+            tr = transcribe.transcribe(norm, language=LANGUAGE,
+                                       model_size=WHISPER_MODEL, log=log)
+            log(f"🤖 จับคำได้ {len(tr.words)} คำ / {len(tr.segments)} ช่วง")
+        except transcribe.TranscribeUnavailable as e:
+            log(f"⚠️ AI ใช้ไม่ได้ ({e}) — ใช้การตรวจช่วงเงียบแทน")
+
+        # 4. Choose the parts to keep --------------------------------------
+        job.set(stage="เลือกช่วงที่เหมาะสม", pct=base_pct + 13,
+                message="🔎 เลือกช่วงที่มีคนพูด…")
+        if tr and tr.segments:
+            clips = analyze.select_for_review(tr, max_duration, variation=opts["variation"])
+        else:
+            clips = analyze.speech_zones(norm, duration, max_duration,
+                                         variation=opts["variation"], log=log)
         if not clips:
             clips = [analyze.Clip(0.0, min(duration, max_duration))]
         log(f"✅ เลือก {len(clips)} ช่วง รวม {sum(c.duration for c in clips):.1f}s")
 
-        # 3b. Tighten: drop dead air (silent pauses) ------------------------
+        # 4b. Tighten: drop dead air — word-precise (AI) so words aren't clipped.
         if opts["dead_air_on"]:
             job.set(stage="ตัดช่วงเงียบ (Dead Air)", pct=base_pct + 17,
                     message="🤫 ตัดช่วงเงียบออก…")
-            clips = analyze.trim_dead_air(clips, transcript=None, path=norm,
+            clips = analyze.trim_dead_air(clips, transcript=tr, path=norm,
                                           aggressiveness=opts["dead_air_aggr"], log=log)
 
         # 5. Cut -------------------------------------------------------------
@@ -598,6 +615,7 @@ if __name__ == "__main__":
     print("=" * 56)
     print("  AutoCut backend")
     print(f"  ffmpeg : {st.ffmpeg or 'NOT FOUND'}")
+    print(f"  ai     : {'whisper' if transcribe.available() else 'silence-fallback'} ({WHISPER_MODEL})")
     print(f"  เปิดเว็บที่ >> http://localhost:5000 <<")
     print("=" * 56)
     app.run(host="0.0.0.0", port=5000, threaded=True)

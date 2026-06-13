@@ -223,10 +223,13 @@ def _silence_intervals(path: str, noise_db: int, min_silence: float, log=None):
 # How long a pause has to be before we treat it as dead air, per aggressiveness.
 # v1.4: only cut clearly-long pauses (sentence breaks) so the result reads like
 # the old transcript-based cut — fewer, cleaner cuts instead of choppy micro-cuts.
+# max_gap: word-based path (AI) — a pause between words longer than this is dead
+#          air.  Tuned to the v1.2 values that "cut better".
+# min_silence: silence-based fallback — only cut clearly-long pauses (smoother).
 DEAD_AIR_PRESETS = {
-    "gentle": {"max_gap": 1.00, "min_silence": 1.00},
-    "medium": {"max_gap": 0.70, "min_silence": 0.75},
-    "strong": {"max_gap": 0.45, "min_silence": 0.50},
+    "gentle": {"max_gap": 0.80, "min_silence": 1.00},
+    "medium": {"max_gap": 0.50, "min_silence": 0.75},
+    "strong": {"max_gap": 0.30, "min_silence": 0.50},
 }
 EDGE_PAD = 0.16     # keep this much around kept speech so onsets/tails aren't clipped
 

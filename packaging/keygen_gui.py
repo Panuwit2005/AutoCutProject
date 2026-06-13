@@ -298,10 +298,33 @@ class PublishTab:
 
 
 # ===========================================================================
+def _scrollable(parent) -> tk.Frame:
+    """Return an inner frame inside a vertical-scrolling canvas (+ mouse wheel),
+    so a tab whose content is taller than the window can be scrolled."""
+    canvas = tk.Canvas(parent, bg=BG, highlightthickness=0)
+    vsb = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
+    canvas.configure(yscrollcommand=vsb.set)
+    vsb.pack(side="right", fill="y")
+    canvas.pack(side="left", fill="both", expand=True)
+
+    inner = tk.Frame(canvas, bg=BG)
+    win = canvas.create_window((0, 0), window=inner, anchor="nw")
+    inner.bind("<Configure>",
+               lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+    canvas.bind("<Configure>", lambda e: canvas.itemconfigure(win, width=e.width))
+
+    def _wheel(e):
+        canvas.yview_scroll(int(-e.delta / 120), "units")
+    canvas.bind("<Enter>", lambda e: canvas.bind_all("<MouseWheel>", _wheel))
+    canvas.bind("<Leave>", lambda e: canvas.unbind_all("<MouseWheel>"))
+    return inner
+
+
 def main() -> None:
     root = tk.Tk()
     root.title("AutoCut Admin — สร้างคีย์ & อัปเดต")
     root.geometry("620x720")
+    root.minsize(520, 480)
     root.configure(bg=BG)
     try:
         ttk.Style().theme_use("clam")
@@ -316,8 +339,8 @@ def main() -> None:
     tab2 = tk.Frame(nb, bg=BG)
     nb.add(tab1, text="  สร้างคีย์  ")
     nb.add(tab2, text="  เผยแพร่อัปเดต  ")
-    KeygenTab(tab1, priv)
-    PublishTab(tab2, priv)
+    KeygenTab(_scrollable(tab1), priv)
+    PublishTab(_scrollable(tab2), priv)
 
     root.mainloop()
 

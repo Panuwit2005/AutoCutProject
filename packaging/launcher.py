@@ -215,7 +215,13 @@ def _setup_environment() -> None:
         os.environ.setdefault("AUTOCUT_FFMPEG", fm)
     if os.path.isfile(fp):
         os.environ.setdefault("AUTOCUT_FFPROBE", fp)
-    # v1.4: no AI model / no online deps — cutting is ffmpeg silence detection.
+
+    # Behind-the-scenes Whisper model (offline) for word-timing cuts.
+    model_dir = os.path.join(base, "models", "faster-whisper-small")
+    if os.path.isdir(model_dir):
+        os.environ.setdefault("AUTOCUT_WHISPER_MODEL", model_dir)
+    os.environ.setdefault("HF_HUB_OFFLINE", "1")
+    os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 
 
 def _free_port(preferred: int = 5000) -> int:
@@ -389,7 +395,8 @@ def _selftest() -> int:
     """Import each dependency in isolation and report failures."""
     _setup_environment()
     import traceback
-    mods = ["flask", "flask_cors", "waitress", "cryptography",
+    mods = ["flask", "flask_cors", "waitress", "cryptography", "faster_whisper",
+            "ctranslate2", "onnxruntime", "av",
             "app", "autocut.tools", "autocut.editor", "autocut.analyze",
             "autocut.media", "autocut.storage", "autocut.licensing", "autocut.updater"]
     bad = 0

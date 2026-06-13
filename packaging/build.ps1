@@ -73,9 +73,10 @@ if ($LASTEXITCODE -ne 0) { Die "dependency install failed" }
 Ok "Build environment ready"
 
 # ---------------------------------------------------------------------------
-Step "2/6  Stage payload (ffmpeg)"
+Step "2/6  Stage payload (ffmpeg + AI model)"
 
 New-Item -ItemType Directory -Force (Join-Path $PAYLOAD "ffmpeg") | Out-Null
+New-Item -ItemType Directory -Force (Join-Path $PAYLOAD "models") | Out-Null
 
 # --- ffmpeg / ffprobe ---
 $ffOut = Join-Path $PAYLOAD "ffmpeg"
@@ -101,7 +102,20 @@ if ((Test-Path (Join-Path $ffOut "ffmpeg.exe")) -and (Test-Path (Join-Path $ffOu
     Ok "ffmpeg + ffprobe staged"
 }
 
-# (No AI model / Node / fonts — v1.4 cuts by silence detection, fully offline.)
+# --- Whisper "small" model (behind-the-scenes word timing; offline) ---
+$modelDir = Join-Path $PAYLOAD "models\faster-whisper-small"
+if (Test-Path (Join-Path $modelDir "model.bin")) {
+    Info "Whisper model already staged"
+} else {
+    Info "Downloading faster-whisper 'small' model (~460MB, one time) ..."
+    $dl = "from faster_whisper import download_model; " +
+          "download_model('small', output_dir=r'$modelDir')"
+    & $PYV -c $dl
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path (Join-Path $modelDir "model.bin"))) {
+        Die "model download failed"
+    }
+    Ok "Whisper model staged"
+}
 
 # ---------------------------------------------------------------------------
 Step "3/6  PyInstaller build"
@@ -116,10 +130,11 @@ Ok "PyInstaller build complete"
 # ---------------------------------------------------------------------------
 Step "4/6  Copy payload next to exe"
 Copy-Item (Join-Path $PAYLOAD "ffmpeg") $DIST -Recurse -Force
+Copy-Item (Join-Path $PAYLOAD "models") $DIST -Recurse -Force
 # A friendly readme for the customer in the portable folder.
 $readme = Join-Path $DIST "อ่านก่อนใช้งาน.txt"
 @"
-AutoCut Pro v1.4 — ตัดคลิปอัตโนมัติ (ออฟไลน์ 100%)
+AutoCut Pro v1.5 — ตัดคลิปอัตโนมัติ (ออฟไลน์ 100%)
 
 วิธีใช้ (ง่าย ๆ 4 ขั้น):
   1. ดับเบิลคลิก AutoCutPro.exe (เปิดเป็นหน้าต่างโปรแกรม)
