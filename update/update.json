@@ -1,7 +1,7 @@
 {
-  "version": "1.2",
-  "zip": "update-1.2.zip",
-  "sha256": "328fba698b35cc817128ad53ab9e2741b5b633d55e244dade16c0772072cc0ac",
-  "sig": "p8OEbgr88jflqvQrzPw2kOBWfoB5k9i8L5l4yom8xhFsTL6GQW0gPWX8UA8iTmyvAtPthaLMQEqBXBIlQkFRDw==",
-  "notes": "เช็ครายการระงับอัตโนมัติทุก 5 นาที (ไม่ต้องปิด-เปิดเอง)"
+  "version": "1.5",
+  "zip": "update-1.5.zip",
+  "sha256": "040665fe558d235a7715fa2d06e51b9b4bef88e847a1641a7b4bcf538c3dd891",
+  "sig": "y4771iRSGEhexXK9SZV6R63c/5pmHE6ub5HRVGUWtccdITr0ZSRTChv0tjFYGVuNiCCN5cDNaVmjxw4dC1KgDQ==",
+  "notes": ""
 }
