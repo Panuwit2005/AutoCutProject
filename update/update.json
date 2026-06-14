@@ -1,7 +1,7 @@
 {
-  "version": "1.5",
-  "zip": "update-1.5.zip",
-  "sha256": "040665fe558d235a7715fa2d06e51b9b4bef88e847a1641a7b4bcf538c3dd891",
-  "sig": "y4771iRSGEhexXK9SZV6R63c/5pmHE6ub5HRVGUWtccdITr0ZSRTChv0tjFYGVuNiCCN5cDNaVmjxw4dC1KgDQ==",
+  "version": "1.5.1",
+  "zip": "update-1.5.1.zip",
+  "sha256": "c7c582b2e6ca8a5b5ee4ef53b2f304946182dcab8a8ed704d1d3f024721a9f51",
+  "sig": "jssl8oIf1PFjdqNwSF53QnswZe7FMGwOdd/I9OMCJv3dT26M9e7jVD5/jIwy8vYKCYAJA2bWogQIuroccfz2Cg==",
   "notes": ""
 }
